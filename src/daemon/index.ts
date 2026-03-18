@@ -12,7 +12,7 @@ import { getDb } from '../db/index';
 import { seedToolRegistry } from '../tools/registry';
 import { loadExternalTools } from '../tools/loader';
 import { runOnce } from '../kernel/runtime';
-import { getNextTask } from '../kernel/scheduler';
+import { getNextTask, processResumeSignals } from '../kernel/scheduler';
 import { getTask } from '../objects/task';
 import { MockLLMAdapter } from '../llm/mock';
 import { OpenAIAdapter } from '../llm/openai';
@@ -65,6 +65,7 @@ export async function startDaemon(): Promise<void> {
 
   try {
     while (!shuttingDown) {
+      processResumeSignals();
       const next = getNextTask();
 
       if (next) {

@@ -7,6 +7,7 @@ import '../tools/builtin/state.query';
 import '../tools/builtin/message.send';
 import '../tools/builtin/message.receive';
 import '../tools/builtin/task.pipe';
+import '../tools/builtin/signal.send';
 
 import { Command } from 'commander';
 import { getDb } from '../db/index';
@@ -19,6 +20,8 @@ import { queryMemories } from '../objects/memory';
 import { listEvents } from '../objects/event';
 import { listMessages } from '../objects/message';
 import { createPipe, listPipes } from '../objects/pipe';
+import { sendSignal, listSignals } from '../objects/signal';
+import { processResumeSignals } from '../kernel/scheduler';
 import { runOnce, runAll } from '../kernel/runtime';
 import type { LLMAdapter } from '../llm/index';
 import { MockLLMAdapter } from '../llm/mock';
@@ -213,6 +216,32 @@ export function buildCli(): Command {
       if (pipes.length === 0) { console.log('No pipes.'); return; }
       for (const p of pipes) {
         console.log(`${p.from_task_id.slice(0, 8)}... → ${p.to_task_id.slice(0, 8)}...`);
+      }
+    });
+
+  program
+    .command('signal:send <taskId> <type>')
+    .description('Send a signal to a task: cancel | pause | resume | inject')
+    .option('-p, --payload <json>', 'JSON payload (for inject)', '{}')
+    .action((taskId: string, type: string, opts: { payload: string }) => {
+      getDb();
+      processResumeSignals(); // handle resume immediately if operator sends it
+      let payload: Record<string, unknown> = {};
+      try { payload = JSON.parse(opts.payload); } catch { console.error('Invalid JSON payload'); process.exit(1); }
+      const signal = sendSignal(taskId, type as any, payload);
+      if (type === 'resume') processResumeSignals();
+      console.log(`Signal sent: ${type} → ${taskId.slice(0, 8)}...  (id: ${signal.id.slice(0, 8)}...)`);
+    });
+
+  program
+    .command('signal:list <taskId>')
+    .description('Show signals sent to a task')
+    .action((taskId: string) => {
+      getDb();
+      const signals = listSignals(taskId);
+      if (signals.length === 0) { console.log('No signals.'); return; }
+      for (const s of signals) {
+        console.log(`[${s.status.padEnd(9)}]  ${s.type.padEnd(8)}  ${new Date(s.created_at).toISOString()}`);
       }
     });
 

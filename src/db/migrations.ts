@@ -58,6 +58,15 @@ export function runMigrations(db: Database.Database): void {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS signals (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS pipes (
       id TEXT PRIMARY KEY,
       from_task_id TEXT NOT NULL,

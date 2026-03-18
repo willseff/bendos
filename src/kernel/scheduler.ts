@@ -1,5 +1,21 @@
-import { listTasks } from '../objects/task';
+import { listTasks, getTask, updateTaskStatus } from '../objects/task';
 import type { Task } from '../objects/task';
+import { getPendingResumeSignals, markSignalDelivered } from '../objects/signal';
+import { emitEvent } from '../objects/event';
+
+// Called by the daemon before each poll. Flips paused tasks back to pending
+// when a resume signal is waiting for them.
+export function processResumeSignals(): void {
+  const signals = getPendingResumeSignals();
+  for (const signal of signals) {
+    const task = getTask(signal.task_id);
+    if (task?.status === 'paused') {
+      updateTaskStatus(signal.task_id, 'pending');
+      emitEvent('signal.delivered', { type: 'resume' }, signal.task_id);
+    }
+    markSignalDelivered(signal.id);
+  }
+}
 
 export function getNextTask(): Task | null {
   const pendingTasks = listTasks('pending');

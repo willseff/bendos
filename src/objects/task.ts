@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/index';
 
-export const TaskStatus = z.enum(['pending', 'running', 'complete', 'failed']);
+export const TaskStatus = z.enum(['pending', 'running', 'complete', 'failed', 'paused']);
 export type TaskStatus = z.infer<typeof TaskStatus>;
 
 export interface TaskResult {

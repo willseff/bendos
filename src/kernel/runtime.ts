@@ -9,6 +9,7 @@ import { checkPolicy } from '../policy/index';
 import { getTool } from '../tools/registry';
 import { getPipesFrom } from '../objects/pipe';
 import { sendMessage } from '../objects/message';
+import { getPendingSignal, markSignalDelivered } from '../objects/signal';
 
 const MAX_STEPS = 20;
 
@@ -26,6 +27,30 @@ export async function runOnce(
   for (let step = 0; step < MAX_STEPS; step++) {
     // Re-fetch task to get latest spawn_count, step_count, etc.
     const currentTask = getTask(task.id)!;
+
+    // Check for pending signals before each step — the runtime handles them,
+    // not the agent. Like a kernel intercepting signals between instructions.
+    const signal = getPendingSignal(task.id);
+    if (signal) {
+      markSignalDelivered(signal.id);
+      emitEvent('signal.delivered', { type: signal.type, payload: signal.payload }, task.id);
+
+      if (signal.type === 'cancel') {
+        updateTaskStatus(task.id, 'failed');
+        return { ran: true, taskId: task.id };
+      }
+
+      if (signal.type === 'pause') {
+        updateTaskStatus(task.id, 'paused');
+        return { ran: true, taskId: task.id };
+      }
+
+      if (signal.type === 'inject') {
+        // Push payload into the task's inbox — it will appear in context this step.
+        sendMessage('system', task.id, 'signal.inject', signal.payload);
+      }
+      // 'resume' is handled by the daemon, not here.
+    }
 
     const context = assembleContext(currentTask, previousNote);
 
