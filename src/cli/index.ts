@@ -10,6 +10,7 @@ import '../tools/builtin/message.send';
 import '../tools/builtin/message.receive';
 import '../tools/builtin/task.pipe';
 import '../tools/builtin/signal.send';
+import '../tools/builtin/task.wait';
 
 import { Command } from 'commander';
 import { getDb } from '../db/index';

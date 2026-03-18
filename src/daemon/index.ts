@@ -1,6 +1,7 @@
 import '../tools/builtin/task.spawn';
 import '../tools/builtin/task.done';
 import '../tools/builtin/task.pipe';
+import '../tools/builtin/task.wait';
 import '../tools/builtin/memory.read';
 import '../tools/builtin/memory.write';
 import '../tools/builtin/artifact.create';
@@ -15,13 +16,15 @@ import { seedToolRegistry } from '../tools/registry';
 import { loadExternalTools } from '../tools/loader';
 import { runOnce } from '../kernel/runtime';
 import { getNextTask, processResumeSignals } from '../kernel/scheduler';
-import { getTask } from '../objects/task';
+import { getTask, createTask } from '../objects/task';
 import { MockLLMAdapter } from '../llm/mock';
 import { OpenAIAdapter } from '../llm/openai';
 import { AnthropicAdapter } from '../llm/anthropic';
 import type { LLMAdapter } from '../llm/index';
 import { writePid, clearPid, daemonStatus } from './pid';
 import { loadAgents } from '../agents/loader';
+import { getAgent } from '../agents/registry';
+import { loadBootConfig, applyBootConfig } from '../boot/index';
 
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS ?? '2000', 10);
 
@@ -47,6 +50,12 @@ export async function startDaemon(): Promise<void> {
   loadExternalTools(process.env.TOOLS_DIR ?? './tools');
   seedToolRegistry();
   loadAgents(process.env.AGENTS_DIR ?? './agents');
+
+  const bootEntries = loadBootConfig(process.env.BOOT_CONFIG ?? './boot.json');
+  applyBootConfig(bootEntries);
+  if (bootEntries.length > 0) {
+    log(`boot: spawned tasks from ${bootEntries.length} boot entr${bootEntries.length === 1 ? 'y' : 'ies'}`);
+  }
 
   const adapter = getAdapter();
   writePid(process.pid);
@@ -81,6 +90,25 @@ export async function startDaemon(): Promise<void> {
         if (result.taskId) {
           const task = getTask(result.taskId)!;
           log(`✓ ${task.id.slice(0, 8)}  [${task.status}]  ${task.step_count} steps`);
+
+          // Supervisor: restart if agent def has a restart policy.
+          if (task.agent_type) {
+            const def = getAgent(task.agent_type);
+            const shouldRestart = def && (
+              def.restart === 'always' ||
+              (def.restart === 'on-failure' && task.status === 'failed')
+            );
+            if (shouldRestart) {
+              const restarted = createTask(task.goal, {
+                agentType: task.agent_type,
+                capabilities: task.capabilities ?? undefined,
+                priority: task.priority,
+                jobId: task.job_id ?? undefined,
+                maxSteps: task.max_steps ?? undefined,
+              });
+              log(`↻ restarting ${task.agent_type} → ${restarted.id.slice(0, 8)}`);
+            }
+          }
         }
       } else {
         if (!idle) {

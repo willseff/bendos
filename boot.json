@@ -1,0 +1,6 @@
+[
+  {
+    "agentType": "monitor",
+    "goal": "Check system state, summarize active tasks and recent events, store findings in memory, then call task.done."
+  }
+]

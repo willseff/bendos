@@ -1,9 +1,12 @@
+export type RestartPolicy = 'never' | 'on-failure' | 'always';
+
 export interface AgentDef {
   name: string;
   description: string;
   systemPrompt: string;
   capabilities?: string[];
   maxSteps?: number;
+  restart?: RestartPolicy;
 }
 
 const registry = new Map<string, AgentDef>();

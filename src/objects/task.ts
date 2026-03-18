@@ -17,6 +17,7 @@ export interface Task {
   status: TaskStatus;
   parent_task_id: string | null;
   job_id: string | null;
+  waiting_for: string | null;
   spawn_count: number;
   step_count: number;
   result: TaskResult | null;
@@ -34,6 +35,7 @@ interface TaskRow {
   status: string;
   parent_task_id: string | null;
   job_id: string | null;
+  waiting_for: string | null;
   spawn_count: number;
   step_count: number;
   result: string | null;
@@ -52,6 +54,7 @@ function fromRow(row: TaskRow): Task {
     status: TaskStatus.parse(row.status),
     parent_task_id: row.parent_task_id,
     job_id: row.job_id,
+    waiting_for: row.waiting_for,
     spawn_count: row.spawn_count,
     step_count: row.step_count,
     result: row.result ? JSON.parse(row.result) as TaskResult : null,
@@ -132,6 +135,24 @@ export function incrementStepCount(id: string): void {
 export function setTaskResult(id: string, result: TaskResult): void {
   const db = getDb();
   db.prepare('UPDATE tasks SET result = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(result), Date.now(), id);
+}
+
+export function setWaitingFor(taskId: string, targetId: string): void {
+  const db = getDb();
+  db.prepare('UPDATE tasks SET waiting_for = ?, updated_at = ? WHERE id = ?').run(targetId, Date.now(), taskId);
+}
+
+export function clearWaiting(taskId: string): void {
+  const db = getDb();
+  db.prepare('UPDATE tasks SET waiting_for = NULL, updated_at = ? WHERE id = ?').run(Date.now(), taskId);
+}
+
+export function getWaiters(targetId: string): Task[] {
+  const db = getDb();
+  const rows = db.prepare(
+    `SELECT * FROM tasks WHERE waiting_for = ? AND status = 'paused'`
+  ).all(targetId) as TaskRow[];
+  return rows.map(fromRow);
 }
 
 export function getTasksByJob(jobId: string): Task[] {

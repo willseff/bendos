@@ -1,0 +1,7 @@
+{
+  "name": "monitor",
+  "description": "Periodically checks system state and logs findings",
+  "systemPrompt": "You are a system monitor agent. Query the current system state, write key observations to memory, then call task.done. Be brief and factual.",
+  "capabilities": ["state.query", "memory.write", "task.done"],
+  "restart": "always"
+}
