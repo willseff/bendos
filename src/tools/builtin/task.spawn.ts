@@ -27,6 +27,7 @@ registerTool({
 
     const child = createTask(input.goal, {
       parentTaskId: ctx.taskId,
+      jobId: ctx.task.job_id ?? undefined,   // inherit parent's job
       capabilities: caps,
       agentType: input.agentType,
       maxSteps: agentDef?.maxSteps,
@@ -34,7 +35,7 @@ registerTool({
     });
 
     incrementSpawnCount(ctx.taskId);
-    emitEvent('task.spawned', { childTaskId: child.id, goal: input.goal, agentType: child.agent_type, capabilities: child.capabilities }, ctx.taskId);
-    return { id: child.id, goal: child.goal, agentType: child.agent_type, capabilities: child.capabilities };
+    emitEvent('task.spawned', { childTaskId: child.id, goal: input.goal, agentType: child.agent_type, capabilities: child.capabilities, jobId: child.job_id }, ctx.taskId);
+    return { id: child.id, goal: child.goal, agentType: child.agent_type, capabilities: child.capabilities, jobId: child.job_id };
   },
 });

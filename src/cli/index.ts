@@ -15,7 +15,7 @@ import { Command } from 'commander';
 import { getDb } from '../db/index';
 import { seedToolRegistry } from '../tools/registry';
 import { loadExternalTools } from '../tools/loader';
-import { createTask, listTasks, getTask } from '../objects/task';
+import { createTask, listTasks, getTask, getTasksByJob, listJobIds, cancelJob } from '../objects/task';
 import { listToolRecords } from '../objects/tool';
 import { listArtifacts } from '../objects/artifact';
 import { queryMemories } from '../objects/memory';
@@ -203,12 +203,53 @@ export function buildCli(): Command {
     .description('Create a new task with the given goal')
     .option('-c, --capabilities <tools>', 'Comma-separated list of allowed tool names (e.g. memory.write,task.done)')
     .option('-p, --priority <n>', 'Scheduling priority (higher = runs first, default 0)', '0')
-    .action((goal: string, opts: { capabilities?: string; priority: string }) => {
+    .option('-j, --job <jobId>', 'Assign to a job group (any string identifier)')
+    .action((goal: string, opts: { capabilities?: string; priority: string; job?: string }) => {
       getDb();
       const caps = opts.capabilities ? opts.capabilities.split(',').map(s => s.trim()) : undefined;
       const priority = parseInt(opts.priority, 10);
-      const task = createTask(goal, { capabilities: caps, priority });
-      console.log(`Created task: ${task.id}  priority=${task.priority}${caps ? `  capabilities=[${caps.join(',')}]` : ''}`);
+      const task = createTask(goal, { capabilities: caps, priority, jobId: opts.job });
+      console.log(`Created task: ${task.id}  priority=${task.priority}${task.job_id ? `  job=${task.job_id}` : ''}${caps ? `  capabilities=[${caps.join(',')}]` : ''}`);
+    });
+
+  program
+    .command('job:list')
+    .description('List all job groups and their task status summary')
+    .action(() => {
+      getDb();
+      const jobIds = listJobIds();
+      if (jobIds.length === 0) { console.log('No jobs.'); return; }
+      for (const jobId of jobIds) {
+        const tasks = getTasksByJob(jobId);
+        const counts = { pending: 0, running: 0, complete: 0, failed: 0, paused: 0 };
+        for (const t of tasks) counts[t.status]++;
+        console.log(
+          `${jobId.slice(0, 16)}  tasks=${tasks.length}` +
+          `  ● ${counts.running}  ○ ${counts.pending}  ✓ ${counts.complete}  ✗ ${counts.failed}`
+        );
+      }
+    });
+
+  program
+    .command('job:status <jobId>')
+    .description('Show all tasks in a job group')
+    .action((jobId: string) => {
+      getDb();
+      const tasks = getTasksByJob(jobId);
+      if (tasks.length === 0) { console.log('No tasks in this job.'); return; }
+      for (const t of tasks) {
+        const sym = { pending: '○', running: '●', complete: '✓', failed: '✗', paused: '‖' }[t.status] ?? '?';
+        console.log(`${t.id.slice(0, 8)}  ${sym} ${t.status.padEnd(9)}  p=${t.priority}  ${t.goal}`);
+      }
+    });
+
+  program
+    .command('job:kill <jobId>')
+    .description('Cancel all pending and running tasks in a job group')
+    .action((jobId: string) => {
+      getDb();
+      const cancelled = cancelJob(jobId);
+      console.log(`Cancelled ${cancelled} task(s) in job ${jobId}.`);
     });
 
   program
