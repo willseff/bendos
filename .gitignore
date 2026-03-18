@@ -3,5 +3,6 @@ dist/
 data/state.db
 data/state.db-shm
 data/state.db-wal
+data/daemon.pid
 .env
 .DS_Store

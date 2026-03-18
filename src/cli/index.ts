@@ -24,6 +24,8 @@ import type { LLMAdapter } from '../llm/index';
 import { MockLLMAdapter } from '../llm/mock';
 import { OpenAIAdapter } from '../llm/openai';
 import { AnthropicAdapter } from '../llm/anthropic';
+import { startDaemon } from '../daemon/index';
+import { daemonStatus, readPid, isProcessAlive } from '../daemon/pid';
 
 function getAdapter(): LLMAdapter {
   const provider = process.env.LLM_PROVIDER ?? 'mock';
@@ -50,6 +52,49 @@ export function buildCli(): Command {
     .version('0.1.0');
 
   const toolsDir = process.env.TOOLS_DIR ?? './tools';
+
+  program
+    .command('daemon')
+    .description('Start the bendos daemon — watches for tasks and runs them continuously')
+    .action(async () => {
+      await startDaemon();
+    });
+
+  program
+    .command('daemon:status')
+    .description('Check whether the daemon is running')
+    .action(() => {
+      const status = daemonStatus();
+      if (status.running) {
+        console.log(`running  pid=${status.pid}`);
+      } else {
+        console.log('not running');
+      }
+    });
+
+  program
+    .command('daemon:stop')
+    .description('Stop the running daemon gracefully')
+    .action(async () => {
+      const status = daemonStatus();
+      if (!status.running || !status.pid) {
+        console.log('Daemon is not running.');
+        return;
+      }
+      process.kill(status.pid, 'SIGTERM');
+      console.log(`Sent SIGTERM to pid ${status.pid}, waiting...`);
+
+      // Poll for up to 5 seconds to confirm shutdown.
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 200));
+        if (!isProcessAlive(status.pid!)) {
+          console.log('Daemon stopped.');
+          return;
+        }
+      }
+      console.warn('Daemon did not stop within 5s. Try: kill -9 ' + status.pid);
+    });
 
   program
     .command('init')
