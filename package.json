@@ -1,0 +1,23 @@
+{
+  "name": "bendos",
+  "version": "0.1.0",
+  "description": "A headless operating environment for LLM agents",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/node": "^20.14.10",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.3",
+    "vitest": "^1.6.0"
+  }
+}
