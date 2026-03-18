@@ -11,6 +11,7 @@ registerTool({
     goal: z.string().min(1),
     agentType: z.string().optional(),
     capabilities: z.array(z.string()).optional(),
+    priority: z.number().int().optional(),
   }),
   async execute(input, ctx) {
     const agentDef = input.agentType ? getAgent(input.agentType) : undefined;
@@ -29,6 +30,7 @@ registerTool({
       capabilities: caps,
       agentType: input.agentType,
       maxSteps: agentDef?.maxSteps,
+      priority: input.priority ?? 0,
     });
 
     incrementSpawnCount(ctx.taskId);

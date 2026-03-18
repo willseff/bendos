@@ -202,11 +202,13 @@ export function buildCli(): Command {
     .command('task:create <goal>')
     .description('Create a new task with the given goal')
     .option('-c, --capabilities <tools>', 'Comma-separated list of allowed tool names (e.g. memory.write,task.done)')
-    .action((goal: string, opts: { capabilities?: string }) => {
+    .option('-p, --priority <n>', 'Scheduling priority (higher = runs first, default 0)', '0')
+    .action((goal: string, opts: { capabilities?: string; priority: string }) => {
       getDb();
       const caps = opts.capabilities ? opts.capabilities.split(',').map(s => s.trim()) : undefined;
-      const task = createTask(goal, undefined, caps);
-      console.log(`Created task: ${task.id}${caps ? `  capabilities=[${caps.join(',')}]` : ''}`);
+      const priority = parseInt(opts.priority, 10);
+      const task = createTask(goal, { capabilities: caps, priority });
+      console.log(`Created task: ${task.id}  priority=${task.priority}${caps ? `  capabilities=[${caps.join(',')}]` : ''}`);
     });
 
   program

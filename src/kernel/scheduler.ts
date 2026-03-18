@@ -24,13 +24,14 @@ export function getNextTask(): Task | null {
   const runningTasks = listTasks('running');
   const runningIds = new Set(runningTasks.map(t => t.id));
 
-  // Depth-first: prefer pending children of running tasks
-  for (const task of pendingTasks) {
-    if (task.parent_task_id && runningIds.has(task.parent_task_id)) {
-      return task;
-    }
-  }
+  // Sort by: priority DESC → depth-first (children of running tasks) → FIFO
+  const sorted = [...pendingTasks].sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    const aIsChild = a.parent_task_id !== null && runningIds.has(a.parent_task_id);
+    const bIsChild = b.parent_task_id !== null && runningIds.has(b.parent_task_id);
+    if (aIsChild !== bIsChild) return aIsChild ? -1 : 1;
+    return a.created_at - b.created_at;
+  });
 
-  // FIFO: return first pending task by created_at
-  return pendingTasks[0];
+  return sorted[0];
 }
