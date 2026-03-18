@@ -4,6 +4,7 @@ import { queryMemories } from '../objects/memory';
 import { listArtifacts } from '../objects/artifact';
 import { receiveMessages } from '../objects/message';
 import { listRegisteredTools } from '../tools/registry';
+import { getAgent } from '../agents/registry';
 import type { LLMContext } from '../llm/index';
 
 export function assembleContext(task: Task, previousNote?: string): LLMContext {
@@ -14,8 +15,11 @@ export function assembleContext(task: Task, previousNote?: string): LLMContext {
   // Peek at inbox without marking read — the message.receive tool marks them read explicitly.
   const unread = receiveMessages(task.id, false);
 
+  const agentDef = task.agent_type ? getAgent(task.agent_type) : undefined;
+
   return {
     goal: task.goal,
+    systemPrompt: agentDef?.systemPrompt,
     events: events.map(e => ({
       type: e.type,
       payload: e.payload,

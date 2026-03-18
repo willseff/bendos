@@ -32,6 +32,8 @@ import { AnthropicAdapter } from '../llm/anthropic';
 import { startDaemon } from '../daemon/index';
 import { printPs, printTop } from './display';
 import { daemonStatus, readPid, isProcessAlive } from '../daemon/pid';
+import { loadAgents } from '../agents/loader';
+import { listAgents, getAgent } from '../agents/registry';
 
 function getAdapter(): LLMAdapter {
   const provider = process.env.LLM_PROVIDER ?? 'mock';
@@ -58,6 +60,7 @@ export function buildCli(): Command {
     .version('0.1.0');
 
   const toolsDir = process.env.TOOLS_DIR ?? './tools';
+  const agentsDir = process.env.AGENTS_DIR ?? './agents';
 
   program
     .command('daemon')
@@ -109,6 +112,7 @@ export function buildCli(): Command {
       getDb();
       loadExternalTools(toolsDir);
       seedToolRegistry();
+      loadAgents(agentsDir);
       console.log('bendos initialized. Database ready and tools registered.');
     });
 
@@ -119,6 +123,7 @@ export function buildCli(): Command {
       getDb();
       loadExternalTools(toolsDir);
       seedToolRegistry();
+      loadAgents(agentsDir);
       const adapter = getAdapter();
       console.log(`Running all tasks with adapter: ${adapter.name}`);
       await runAll(adapter);
@@ -156,6 +161,41 @@ export function buildCli(): Command {
         const interval = setInterval(() => { console.clear(); printTop(); }, 2000);
         process.on('SIGINT', () => { clearInterval(interval); process.exit(0); });
       }
+    });
+
+  program
+    .command('agent:list')
+    .description('List all loaded agent definitions')
+    .action(() => {
+      loadAgents(agentsDir);
+      const agents = listAgents();
+      if (agents.length === 0) { console.log('No agents loaded.'); return; }
+      for (const a of agents) {
+        const caps = a.capabilities ? `  caps=[${a.capabilities.join(',')}]` : '';
+        const steps = a.maxSteps ? `  maxSteps=${a.maxSteps}` : '';
+        console.log(`${a.name.padEnd(20)}  ${a.description}${caps}${steps}`);
+      }
+    });
+
+  program
+    .command('agent:run <name> <goal>')
+    .description('Create and immediately run a task as the given agent type')
+    .action(async (name: string, goal: string) => {
+      getDb();
+      loadExternalTools(toolsDir);
+      seedToolRegistry();
+      loadAgents(agentsDir);
+      const def = getAgent(name);
+      if (!def) { console.error(`Unknown agent: ${name}`); process.exit(1); }
+      const task = createTask(goal, {
+        capabilities: def.capabilities,
+        agentType: name,
+        maxSteps: def.maxSteps,
+      });
+      console.log(`Created task ${task.id} as agent "${name}"`);
+      const adapter = getAdapter();
+      await runAll(adapter);
+      console.log('Done.');
     });
 
   program

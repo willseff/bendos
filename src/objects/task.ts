@@ -20,6 +20,8 @@ export interface Task {
   step_count: number;
   result: TaskResult | null;
   capabilities: string[] | null;
+  agent_type: string | null;
+  max_steps: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -33,6 +35,8 @@ interface TaskRow {
   step_count: number;
   result: string | null;
   capabilities: string | null;
+  agent_type: string | null;
+  max_steps: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -47,21 +51,41 @@ function fromRow(row: TaskRow): Task {
     step_count: row.step_count,
     result: row.result ? JSON.parse(row.result) as TaskResult : null,
     capabilities: row.capabilities ? JSON.parse(row.capabilities) as string[] : null,
+    agent_type: row.agent_type,
+    max_steps: row.max_steps,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
 
-export function createTask(goal: string, parentTaskId?: string, capabilities?: string[]): Task {
+export interface CreateTaskOptions {
+  parentTaskId?: string;
+  capabilities?: string[];
+  agentType?: string;
+  maxSteps?: number;
+}
+
+export function createTask(goal: string, parentTaskIdOrOpts?: string | CreateTaskOptions, capabilities?: string[]): Task {
   const db = getDb();
   const id = randomUUID();
   const now = Date.now();
-  const caps = capabilities !== undefined ? JSON.stringify(capabilities) : null;
+
+  // Support both old signature createTask(goal, parentId?, caps?) and new options object.
+  let opts: CreateTaskOptions = {};
+  if (typeof parentTaskIdOrOpts === 'string') {
+    opts = { parentTaskId: parentTaskIdOrOpts, capabilities };
+  } else if (parentTaskIdOrOpts) {
+    opts = parentTaskIdOrOpts;
+  } else {
+    opts = { capabilities };
+  }
+
+  const caps = opts.capabilities !== undefined ? JSON.stringify(opts.capabilities) : null;
 
   db.prepare(`
-    INSERT INTO tasks (id, goal, status, parent_task_id, spawn_count, step_count, capabilities, created_at, updated_at)
-    VALUES (?, ?, 'pending', ?, 0, 0, ?, ?, ?)
-  `).run(id, goal, parentTaskId ?? null, caps, now, now);
+    INSERT INTO tasks (id, goal, status, parent_task_id, spawn_count, step_count, capabilities, agent_type, max_steps, created_at, updated_at)
+    VALUES (?, ?, 'pending', ?, 0, 0, ?, ?, ?, ?, ?)
+  `).run(id, goal, opts.parentTaskId ?? null, caps, opts.agentType ?? null, opts.maxSteps ?? null, now, now);
 
   return getTask(id)!;
 }

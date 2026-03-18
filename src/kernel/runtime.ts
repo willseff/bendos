@@ -11,7 +11,7 @@ import { getPipesFrom } from '../objects/pipe';
 import { sendMessage } from '../objects/message';
 import { getPendingSignal, markSignalDelivered } from '../objects/signal';
 
-const MAX_STEPS = 20;
+const DEFAULT_MAX_STEPS = 20;
 
 export async function runOnce(
   adapter: LLMAdapter
@@ -22,9 +22,10 @@ export async function runOnce(
   updateTaskStatus(task.id, 'running');
   emitEvent('task.started', { goal: task.goal }, task.id);
 
+  const maxSteps = task.max_steps ?? DEFAULT_MAX_STEPS;
   let previousNote: string | undefined;
 
-  for (let step = 0; step < MAX_STEPS; step++) {
+  for (let step = 0; step < maxSteps; step++) {
     // Re-fetch task to get latest spawn_count, step_count, etc.
     const currentTask = getTask(task.id)!;
 
@@ -177,7 +178,7 @@ export async function runOnce(
   }
 
   // Exceeded max steps
-  emitEvent('task.step_limit', { steps: MAX_STEPS }, task.id);
+  emitEvent('task.step_limit', { steps: maxSteps }, task.id);
   updateTaskStatus(task.id, 'failed');
   return { ran: true, taskId: task.id };
 }

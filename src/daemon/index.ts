@@ -21,6 +21,7 @@ import { OpenAIAdapter } from '../llm/openai';
 import { AnthropicAdapter } from '../llm/anthropic';
 import type { LLMAdapter } from '../llm/index';
 import { writePid, clearPid, daemonStatus } from './pid';
+import { loadAgents } from '../agents/loader';
 
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS ?? '2000', 10);
 
@@ -45,6 +46,7 @@ export async function startDaemon(): Promise<void> {
   getDb();
   loadExternalTools(process.env.TOOLS_DIR ?? './tools');
   seedToolRegistry();
+  loadAgents(process.env.AGENTS_DIR ?? './agents');
 
   const adapter = getAdapter();
   writePid(process.pid);
