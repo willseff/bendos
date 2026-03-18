@@ -28,6 +28,7 @@ import { MockLLMAdapter } from '../llm/mock';
 import { OpenAIAdapter } from '../llm/openai';
 import { AnthropicAdapter } from '../llm/anthropic';
 import { startDaemon } from '../daemon/index';
+import { printPs, printTop } from './display';
 import { daemonStatus, readPid, isProcessAlive } from '../daemon/pid';
 
 function getAdapter(): LLMAdapter {
@@ -134,6 +135,24 @@ export function buildCli(): Command {
         console.log(`Task ran: ${result.taskId}`);
       } else {
         console.log('No pending tasks.');
+      }
+    });
+
+  program
+    .command('ps')
+    .description('Show all tasks as a process tree')
+    .action(() => { getDb(); printPs(); });
+
+  program
+    .command('top')
+    .description('Show system activity snapshot')
+    .option('-w, --watch', 'Refresh every 2 seconds (Ctrl+C to stop)')
+    .action((opts: { watch?: boolean }) => {
+      getDb();
+      printTop();
+      if (opts.watch) {
+        const interval = setInterval(() => { console.clear(); printTop(); }, 2000);
+        process.on('SIGINT', () => { clearInterval(interval); process.exit(0); });
       }
     });
 
