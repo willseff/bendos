@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.79.0",
     "better-sqlite3": "^12.8.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",

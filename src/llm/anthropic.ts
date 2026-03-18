@@ -47,6 +47,10 @@ Wrap your JSON response in a code block like this:
       .map(m => `- [${m.tags.join(', ')}] ${m.content}`)
       .join('\n');
 
+    const inboxSummary = context.inbox.length > 0
+      ? context.inbox.map(m => `- [${m.type}] from=${m.from} ${JSON.stringify(m.payload)}`).join('\n')
+      : '(empty)';
+
     const userMessage = `Goal: ${context.goal}
 
 Recent events:
@@ -55,9 +59,12 @@ ${recentEvents || '(none)'}
 Memories:
 ${memorySummary || '(none)'}
 
+Inbox (unread messages from other tasks):
+${inboxSummary}
+
 ${context.note ? `Previous note: ${context.note}` : ''}
 
-What is your next action?`;
+When the goal is fully achieved, call task.done. What is your next action?`;
 
     const response = await client.messages.create({
       model: this.model,
