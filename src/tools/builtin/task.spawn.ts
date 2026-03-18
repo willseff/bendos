@@ -12,6 +12,7 @@ registerTool({
     agentType: z.string().optional(),
     capabilities: z.array(z.string()).optional(),
     priority: z.number().int().optional(),
+    env: z.record(z.string()).optional().describe('Environment variables for the child task, readable from /proc/self/env'),
   }),
   async execute(input, ctx) {
     const agentDef = input.agentType ? getAgent(input.agentType) : undefined;
@@ -32,6 +33,7 @@ registerTool({
       agentType: input.agentType,
       maxSteps: agentDef?.maxSteps,
       priority: input.priority ?? 0,
+      env: input.env,
     });
 
     incrementSpawnCount(ctx.taskId);

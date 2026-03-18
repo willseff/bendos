@@ -25,6 +25,7 @@ export interface Task {
   agent_type: string | null;
   max_steps: number | null;
   priority: number;
+  env: Record<string, string> | null;
   created_at: number;
   updated_at: number;
 }
@@ -43,6 +44,7 @@ interface TaskRow {
   agent_type: string | null;
   max_steps: number | null;
   priority: number;
+  env: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -62,6 +64,7 @@ function fromRow(row: TaskRow): Task {
     agent_type: row.agent_type,
     max_steps: row.max_steps,
     priority: row.priority ?? 0,
+    env: row.env ? JSON.parse(row.env) as Record<string, string> : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -74,6 +77,7 @@ export interface CreateTaskOptions {
   agentType?: string;
   maxSteps?: number;
   priority?: number;
+  env?: Record<string, string>;
 }
 
 export function createTask(goal: string, parentTaskIdOrOpts?: string | CreateTaskOptions, capabilities?: string[]): Task {
@@ -92,11 +96,12 @@ export function createTask(goal: string, parentTaskIdOrOpts?: string | CreateTas
   }
 
   const caps = opts.capabilities !== undefined ? JSON.stringify(opts.capabilities) : null;
+  const env  = opts.env !== undefined ? JSON.stringify(opts.env) : null;
 
   db.prepare(`
-    INSERT INTO tasks (id, goal, status, parent_task_id, job_id, spawn_count, step_count, capabilities, agent_type, max_steps, priority, created_at, updated_at)
-    VALUES (?, ?, 'pending', ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)
-  `).run(id, goal, opts.parentTaskId ?? null, opts.jobId ?? null, caps, opts.agentType ?? null, opts.maxSteps ?? null, opts.priority ?? 0, now, now);
+    INSERT INTO tasks (id, goal, status, parent_task_id, job_id, spawn_count, step_count, capabilities, agent_type, max_steps, priority, env, created_at, updated_at)
+    VALUES (?, ?, 'pending', ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, goal, opts.parentTaskId ?? null, opts.jobId ?? null, caps, opts.agentType ?? null, opts.maxSteps ?? null, opts.priority ?? 0, env, now, now);
 
   return getTask(id)!;
 }

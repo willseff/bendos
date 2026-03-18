@@ -150,7 +150,7 @@ describe('/proc synthetic mount', () => {
   it('fs.stat /proc/<taskId> returns dir with 4 entries', () => {
     const stat = vfsStat(`/proc/${taskId}`);
     expect(stat!.type).toBe('dir');
-    expect(stat!.size).toBe(4);
+    expect(stat!.size).toBe(5);
     expect(stat!.updated_at).toBeDefined();
   });
 

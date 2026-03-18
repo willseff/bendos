@@ -57,6 +57,32 @@ export function createArtifact(
   return db.prepare('SELECT * FROM artifacts WHERE id = ?').get(id) as Artifact;
 }
 
+// Write (create or update) an artifact at a given path.
+// If an artifact already exists at this path owned by this task, update it in place.
+// Otherwise create a new one.
+export function writeArtifactByPath(
+  path: string,
+  content: string,
+  taskId?: string,
+  mimeType?: string,
+  visibility: Visibility = 'private',
+): Artifact {
+  const db = getDb();
+  const existing = taskId
+    ? db.prepare('SELECT * FROM artifacts WHERE path = ? AND task_id = ? LIMIT 1').get(path, taskId) as ArtifactRow | undefined
+    : db.prepare('SELECT * FROM artifacts WHERE path = ? LIMIT 1').get(path) as ArtifactRow | undefined;
+
+  if (existing) {
+    db.prepare('UPDATE artifacts SET content = ?, mime_type = ?, visibility = ? WHERE id = ?')
+      .run(content, mimeType ?? existing.mime_type, visibility, existing.id);
+    return db.prepare('SELECT * FROM artifacts WHERE id = ?').get(existing.id) as Artifact;
+  }
+
+  // Derive a name from the last path segment.
+  const name = path.split('/').filter(Boolean).pop() ?? path;
+  return createArtifact(name, content, taskId, mimeType, visibility, path);
+}
+
 // Read a single artifact by path, respecting visibility for the given task.
 export function getArtifactByPath(path: string, taskId?: string): Artifact | null {
   const db = getDb();

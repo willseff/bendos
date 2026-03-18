@@ -18,6 +18,8 @@ function buildSystemPrompt(task: Task, agentSystemPrompt?: string, unreadCount =
 
   const toolList = allowedTools.map(t => `  ${t.name}`).join('\n');
 
+  const envEntries = task.env ? Object.entries(task.env) : [];
+
   const lines: string[] = [
     `# System`,
     `You are a bendos agent.`,
@@ -33,19 +35,26 @@ function buildSystemPrompt(task: Task, agentSystemPrompt?: string, unreadCount =
     toolList,
     ``,
     `# Filesystem`,
-    `Use fs.ls and fs.read to navigate the virtual filesystem.`,
-    `  /proc/self          your process directory (status, events, inbox, memory)`,
+    `Use fs.ls and fs.read to navigate. Use fs.write to create or update files.`,
+    `  /proc/self          your process directory (status, events, inbox, memory, env)`,
     `  /proc/self/status   your full task record including result after task.done`,
+    `  /proc/self/env      your environment variables (key/value config)`,
     `  /proc/${short}      same as /proc/self`,
     `  /agents             agent definitions`,
+    `  /tmp                shared scratch space — readable and writable by all tasks`,
     ``,
     `# Coordination`,
     `- Spawn subtasks with task.spawn. Join on them with task.wait.`,
     `- When task.wait resumes you, check your inbox for a task.result message.`,
+    `- Share files between tasks by writing to /tmp (public) and reading from /tmp.`,
     `- Send messages to other tasks with message.send.`,
     `- Write persistent facts with memory.write.`,
-    `- Produce file output with artifact.create (sets a /path for later fs.read).`,
     ``,
+    ...(envEntries.length > 0 ? [
+      `# Environment`,
+      ...envEntries.map(([k, v]) => `  ${k}=${v}`),
+      ``,
+    ] : []),
   ].filter(l => l !== null) as string[];
 
   if (unreadCount > 0) {

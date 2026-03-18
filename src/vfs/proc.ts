@@ -4,7 +4,7 @@ import { receiveMessages } from '../objects/message';
 import { queryMemories } from '../objects/memory';
 import type { VFSMount, VFSEntry, VFSStat, VFSContext } from './index';
 
-const PROC_FILES = ['status', 'events', 'inbox', 'memory'] as const;
+const PROC_FILES = ['status', 'events', 'inbox', 'memory', 'env'] as const;
 
 export class ProcMount implements VFSMount {
   read(relPath: string, ctx: VFSContext): string | null {
@@ -93,6 +93,9 @@ function readProcFile(taskId: string, file: string): string | null {
 
     case 'memory':
       return JSON.stringify(queryMemories(taskId), null, 2);
+
+    case 'env':
+      return JSON.stringify(task.env ?? {}, null, 2);
 
     default:
       return null;

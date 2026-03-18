@@ -87,6 +87,7 @@ export function runMigrations(db: Database.Database): void {
     `ALTER TABLE tasks     ADD COLUMN job_id TEXT`,
     `ALTER TABLE tasks     ADD COLUMN waiting_for TEXT`,
     `ALTER TABLE artifacts ADD COLUMN path TEXT`,
+    `ALTER TABLE tasks     ADD COLUMN env TEXT`,
   ]) {
     try { db.exec(sql); } catch { /* column already exists */ }
   }
