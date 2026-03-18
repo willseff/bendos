@@ -1,5 +1,7 @@
 # bendos
 
+[![tests](https://github.com/willseff/bendos/actions/workflows/test.yml/badge.svg)](https://github.com/willseff/bendos/actions/workflows/test.yml)
+
 An OS for LLM agents.
 
 bendos gives language models the primitives a real operating system gives programs: processes, memory, a filesystem, IPC, signals, capabilities, and a scheduler. Agents run autonomously inside a persistent daemon — no chat UI, no cloud, no human in the loop.
