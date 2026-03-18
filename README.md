@@ -1,75 +1,29 @@
 # bendos
 
-A self-contained, headless operating environment for LLM agents.
+An OS for LLM agents.
 
-bendos is not a desktop OS. It is a local-first runtime where LLMs are the only users — a minimal kernel that gives language models stable primitives to reason about, act on, and persist state across steps.
-
----
-
-## Why it exists
-
-LLMs are increasingly useful for multi-step work, but most agent frameworks wrap them in web frameworks, cloud services, or chat UIs. bendos takes the opposite approach: a single SQLite database, a synchronous runtime loop, and a small set of composable primitives.
-
-The goal is to answer one question cleanly: *what does an LLM need to get real work done on a local machine?*
-
-The answer bendos gives: tasks, memory, tools, artifacts, and events. Nothing else.
+bendos gives language models the primitives a real operating system gives programs: processes, memory, a filesystem, IPC, signals, capabilities, and a scheduler. Agents run autonomously inside a persistent daemon — no chat UI, no cloud, no human in the loop.
 
 ---
 
-## Core concepts
+## Concepts
 
-| Primitive | Description |
-|-----------|-------------|
-| **Task** | A unit of work with a goal. Has a status (`pending`, `running`, `complete`, `failed`), a step count, and an optional parent task. |
-| **Memory** | A piece of text the agent wants to remember, optionally tagged and linked to a task. |
-| **Tool** | A named, schema-validated function the agent can invoke. Registered at startup, seeded to the DB. |
-| **Artifact** | A named content blob (text, JSON, code) produced during a task, like a file. |
-| **Event** | An immutable log entry. Every significant action emits an event: `task.started`, `action.executed`, `task.complete`, etc. |
-
----
-
-## Architecture overview
-
-```
-src/
-  main.ts           Entry point — loads dotenv, runs CLI
-  cli/              Commander CLI — all user-facing commands
-  kernel/
-    scheduler.ts    Pick next task (FIFO + depth-first for children)
-    runtime.ts      runOnce / runAll — the agent loop
-  llm/
-    index.ts        AgentActionSchema, LLMAdapter interface
-    mock.ts         Deterministic mock adapter (no API calls)
-    openai.ts       OpenAI adapter (lazy import)
-    anthropic.ts    Anthropic adapter (lazy import)
-  tools/
-    registry.ts     In-memory tool registry + seedToolRegistry
-    builtin/        Six built-in tools (task.spawn, task.done, memory.*, artifact.create, state.query)
-  context/
-    assembler.ts    Build LLMContext from task + DB state
-  policy/
-    index.ts        Gate on tool calls (spawn limit, etc.)
-  objects/
-    task.ts         Task CRUD
-    memory.ts       Memory CRUD
-    tool.ts         Tool record CRUD
-    artifact.ts     Artifact CRUD
-    event.ts        Event emit + query
-  db/
-    index.ts        Lazy singleton DB connection
-    migrations.ts   CREATE TABLE IF NOT EXISTS for all tables
-```
-
-### Why specialized tables instead of a generic objects table?
-
-bendos uses one table per primitive type rather than a single `objects` table with a `type` column. This means:
-
-- Queries are typed — no `JSON.parse` sprinkled everywhere
-- Foreign keys work correctly — `memories.task_id REFERENCES tasks(id)` is enforceable
-- SQLite schema acts as documentation
-- Adding a new primitive is one migration, not a schema negotiation
-
-The tradeoff is more migration code up front, but for a local-first runtime with a known, stable set of primitives, this is the right call.
+| OS primitive | bendos equivalent |
+|---|---|
+| Process | Task — has a goal, status, step count, priority |
+| Executable | Agent def — JSON file defining role, system prompt, capabilities |
+| Signal | `cancel`, `pause`, `resume`, `inject` — intercepted between steps |
+| Filesystem | Artifacts with paths (`/reports/summary.md`) |
+| Memory | Private/public key-value store per task |
+| IPC | Point-to-point messages + pipes between tasks |
+| Capabilities | Per-task tool allowlist enforced by the policy layer |
+| Scheduler | Priority queue → depth-first children → FIFO |
+| Daemon | Always-on process that runs tasks, supervises services, fires cron jobs |
+| ps / top | `bendos ps` and `bendos top --watch` |
+| Process group | Job ID — kill an entire group atomically with `bendos job:kill` |
+| wait() | `task.wait` — suspend a task until a child completes, receive result in inbox |
+| systemd service | `"restart": "always"` in agent def — daemon respawns automatically |
+| cron | `"cron": "0 9 * * *"` in boot.json — scheduled agent execution |
 
 ---
 
@@ -77,182 +31,115 @@ The tradeoff is more migration code up front, but for a local-first runtime with
 
 ```bash
 npm install
-npm run dev -- init
+cp .env.example .env   # set LLM_PROVIDER and API key
 ```
 
-The `init` command creates the SQLite database at `data/state.db` (configurable via `DB_PATH` env var) and registers all built-in tools.
-
----
-
-## Running
-
-### 1. Initialize
+## Quickstart
 
 ```bash
-npm run dev -- init
-# bendos initialized. Database ready and tools registered.
+# Start the daemon — boots agents from boot.json, runs forever
+npx tsx src/main.ts daemon
+
+# In another terminal
+npx tsx src/main.ts ps
+npx tsx src/main.ts top --watch
 ```
 
-### 2. Create a task
+Or run one-shot:
 
 ```bash
-npm run dev -- task:create "write a haiku about recursion"
-# Created task: 3f2a1b4c-...
-```
-
-### 3. Run the agent
-
-```bash
-npm run dev -- run
-# Running all tasks with adapter: mock
-# All tasks complete.
-```
-
-Or run a single step:
-
-```bash
-npm run dev -- run:once
-# Task ran: 3f2a1b4c-...
-```
-
-### 4. Inspect results
-
-```bash
-npm run dev -- task:list
-npm run dev -- trace 3f2a1b4c-...
-npm run dev -- object:list
+npx tsx src/main.ts task:create "research the history of unix" --priority 5
+npx tsx src/main.ts run
+npx tsx src/main.ts trace <taskId>
 ```
 
 ---
 
-## CLI examples
+## Defining agents
 
-### `init`
-```
-$ npm run dev -- init
-bendos initialized. Database ready and tools registered.
-```
+Create a JSON file in `agents/`:
 
-### `task:create`
-```
-$ npm run dev -- task:create "summarize the last 3 events"
-Created task: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-```
-
-### `task:list`
-```
-$ npm run dev -- task:list
-ID                                      STATUS      STEPS   GOAL
-------------------------------------------------------------------------
-a1b2c3d4-e5f6-7890-abcd-ef1234567890  complete    2       summarize the last 3 events
+```json
+{
+  "name": "researcher",
+  "description": "Researches a topic and writes a report",
+  "systemPrompt": "You are a research agent. Investigate the topic, store findings in memory, write a report to /reports/<topic>.md, then call task.done.",
+  "capabilities": ["memory.write", "memory.read", "artifact.create", "artifact.read", "artifact.list", "task.done"],
+  "maxSteps": 30,
+  "restart": "on-failure"
+}
 ```
 
-### `run`
-```
-$ npm run dev -- run
-Running all tasks with adapter: mock
-All tasks complete.
-```
+Run one immediately:
 
-### `run:once`
-```
-$ npm run dev -- run:once
-Task ran: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-```
-
-### `trace`
-```
-$ npm run dev -- trace a1b2c3d4-e5f6-7890-abcd-ef1234567890
-Trace for task: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-------------------------------------------------------------
-  [task.started] {"goal":"summarize the last 3 events"}
-  step 0: memory.write — I should start by writing a memory about the goal.
-  step 1: task.done — I have completed the task.
-  [task.complete] {"summary":"Completed: summarize the last 3 events"}
-```
-
-### `object:list`
-```
-$ npm run dev -- object:list
-Object counts:
-  tasks:     1
-  tools:     6
-  artifacts: 0
-  memories:  1
+```bash
+npx tsx src/main.ts agent:run researcher "the history of Plan 9"
 ```
 
 ---
 
-## Data model
+## Boot config
 
-### tasks
-| Column | Type | Notes |
-|--------|------|-------|
-| id | TEXT PK | UUID |
-| goal | TEXT | The agent's objective |
-| status | TEXT | pending / running / complete / failed |
-| parent_task_id | TEXT FK | Nullable, references tasks(id) |
-| spawn_count | INTEGER | How many child tasks have been spawned |
-| step_count | INTEGER | How many LLM steps have been taken |
-| created_at | INTEGER | Unix ms |
-| updated_at | INTEGER | Unix ms |
+`boot.json` defines what the daemon runs autonomously:
 
-### memories
-| Column | Type | Notes |
-|--------|------|-------|
-| id | TEXT PK | UUID |
-| task_id | TEXT FK | Nullable |
-| content | TEXT | Free-form text |
-| tags | TEXT | JSON array of strings |
-| created_at | INTEGER | Unix ms |
+```json
+[
+  { "agentType": "monitor", "goal": "check system state and log findings" },
+  { "agentType": "researcher", "goal": "write daily digest", "cron": "0 9 * * *" }
+]
+```
 
-### tools
-| Column | Type | Notes |
-|--------|------|-------|
-| id | TEXT PK | UUID |
-| name | TEXT UNIQUE | e.g. `memory.write` |
-| description | TEXT | Human-readable |
-| input_schema | TEXT | JSON schema object |
-| created_at | INTEGER | Unix ms |
-
-### artifacts
-| Column | Type | Notes |
-|--------|------|-------|
-| id | TEXT PK | UUID |
-| task_id | TEXT FK | Nullable |
-| name | TEXT | Filename-like identifier |
-| content | TEXT | File contents |
-| mime_type | TEXT | Default `text/plain` |
-| created_at | INTEGER | Unix ms |
-
-### events
-| Column | Type | Notes |
-|--------|------|-------|
-| id | TEXT PK | UUID |
-| task_id | TEXT | Nullable, no FK (allows system events) |
-| type | TEXT | e.g. `action.executed`, `task.complete` |
-| payload | TEXT | JSON object |
-| created_at | INTEGER | Unix ms |
+- Entries without `cron` spawn once on startup (idempotent — skipped if already running)
+- Entries with `cron` fire on schedule, every time the expression matches
+- `"restart": "always"` in the agent def respawns it whenever it exits
 
 ---
 
-## Current limitations
+## Key CLI commands
 
-- **Single process** — no concurrency, one task runs at a time
-- **No streaming** — LLM responses are awaited in full before proceeding
-- **No token counting** — context is not pruned based on token budget
-- **No authentication** — the CLI and DB are local-only, no access control
-- **No parallelism** — the scheduler is strictly sequential
-- **Mock adapter only ships tested** — OpenAI and Anthropic adapters require their respective SDKs to be installed separately
+```bash
+bendos daemon              # start the daemon
+bendos daemon:stop         # graceful shutdown
+bendos ps                  # process tree
+bendos top --watch         # live system snapshot
+
+bendos task:create <goal> [--priority N] [--job <id>] [--capabilities a,b]
+bendos agent:list
+bendos agent:run <name> <goal>
+
+bendos signal:send <taskId> cancel|pause|resume|inject
+bendos job:list
+bendos job:kill <jobId>
+
+bendos trace <taskId>      # full event log for a task
+```
 
 ---
 
-## Next steps
+## LLM adapters
 
-- **Streaming** — pipe LLM token streams to the terminal during `run`
-- **Parallel tasks** — run multiple independent tasks concurrently using worker threads
-- **Real prompt templates** — structured system prompts per task type, few-shot examples
-- **Web UI** — a minimal local dashboard showing the task tree, event stream, and memory browser
-- **Task DAGs** — explicit dependency edges between tasks, not just parent/child spawn relationships
-- **Token budgeting** — truncate context intelligently when approaching model limits
-- **Plugin tools** — load tools from external modules at runtime
+Set `LLM_PROVIDER` in `.env`:
+
+| Value | Requires |
+|---|---|
+| `mock` | nothing — deterministic, for testing |
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+
+---
+
+## Built-in tools
+
+`task.spawn` `task.done` `task.wait` `task.pipe` `memory.read` `memory.write` `artifact.create` `artifact.read` `artifact.list` `message.send` `message.receive` `signal.send` `state.query`
+
+External tools can be added to the `tools/` directory as exec scripts (stdin/stdout JSON) or JS modules.
+
+---
+
+## Tests
+
+```bash
+npm test
+```
+
+77 tests across scheduler, signals, IPC, pipes, isolation, capabilities, agents, jobs, wait, cron, and the runtime loop.
