@@ -1,5 +1,7 @@
 node_modules/
 dist/
 data/state.db
+data/state.db-shm
+data/state.db-wal
 .env
 .DS_Store

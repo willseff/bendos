@@ -14,6 +14,8 @@ export interface LLMContext {
   events: Array<{ type: string; payload: unknown; created_at: number }>;
   memories: Array<{ id: string; content: string; tags: string[] }>;
   tools: Array<{ name: string; description: string }>;
+  // Unread messages in this task's inbox from other tasks.
+  inbox: Array<{ id: string; from: string; type: string; payload: unknown }>;
   note?: string;
 }
 

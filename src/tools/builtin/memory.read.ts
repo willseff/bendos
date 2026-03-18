@@ -11,7 +11,8 @@ registerTool({
   }),
   async execute(input, ctx) {
     if (input.id) {
-      return readMemory(input.id);
+      // Enforce isolation: private memories of other tasks are not visible.
+      return readMemory(input.id, ctx.taskId) ?? { error: 'not found or not accessible' };
     }
     return queryMemories(ctx.taskId, input.tag);
   },
