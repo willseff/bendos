@@ -127,6 +127,17 @@ export function updateTaskStatus(id: string, status: TaskStatus): void {
   db.prepare('UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?').run(status, Date.now(), id);
 }
 
+// On daemon startup, any task left in 'running' state is stale (the process
+// that was executing it is gone). Reset them to 'pending' so they are retried.
+export function recoverStaleTasks(): number {
+  const db = getDb();
+  const now = Date.now();
+  const { changes } = db.prepare(
+    `UPDATE tasks SET status = 'pending', updated_at = ? WHERE status = 'running'`
+  ).run(now);
+  return changes;
+}
+
 export function incrementSpawnCount(id: string): void {
   const db = getDb();
   db.prepare('UPDATE tasks SET spawn_count = spawn_count + 1, updated_at = ? WHERE id = ?').run(Date.now(), id);

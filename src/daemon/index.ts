@@ -22,7 +22,7 @@ import { seedToolRegistry } from '../tools/registry';
 import { loadExternalTools } from '../tools/loader';
 import { runOnce } from '../kernel/runtime';
 import { getNextTask, processResumeSignals } from '../kernel/scheduler';
-import { getTask, createTask } from '../objects/task';
+import { getTask, createTask, recoverStaleTasks } from '../objects/task';
 import { MockLLMAdapter } from '../llm/mock';
 import { OpenAIAdapter } from '../llm/openai';
 import { AnthropicAdapter } from '../llm/anthropic';
@@ -55,6 +55,8 @@ export async function startDaemon(apiPort?: number): Promise<void> {
   }
 
   getDb();
+  const stale = recoverStaleTasks();
+  if (stale > 0) log(`recovered ${stale} stale task${stale === 1 ? '' : 's'} (were running at last shutdown)`);
   loadExternalTools(process.env.TOOLS_DIR ?? './tools');
   seedToolRegistry();
   loadAgents(process.env.AGENTS_DIR ?? './agents');
