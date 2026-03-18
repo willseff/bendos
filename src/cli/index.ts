@@ -11,6 +11,10 @@ import '../tools/builtin/message.receive';
 import '../tools/builtin/task.pipe';
 import '../tools/builtin/signal.send';
 import '../tools/builtin/task.wait';
+import '../tools/builtin/fs.read';
+import '../tools/builtin/fs.ls';
+import '../tools/builtin/fs.stat';
+import '../vfs/init';
 
 import { Command } from 'commander';
 import { getDb } from '../db/index';
@@ -66,8 +70,9 @@ export function buildCli(): Command {
   program
     .command('daemon')
     .description('Start the bendos daemon — watches for tasks and runs them continuously')
-    .action(async () => {
-      await startDaemon();
+    .option('-p, --port <n>', 'HTTP API port (default 4000, or API_PORT env var)', '4000')
+    .action(async (opts: { port: string }) => {
+      await startDaemon(parseInt(opts.port, 10));
     });
 
   program

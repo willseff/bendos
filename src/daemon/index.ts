@@ -2,6 +2,10 @@ import '../tools/builtin/task.spawn';
 import '../tools/builtin/task.done';
 import '../tools/builtin/task.pipe';
 import '../tools/builtin/task.wait';
+import '../tools/builtin/fs.read';
+import '../tools/builtin/fs.ls';
+import '../tools/builtin/fs.stat';
+import '../vfs/init';
 import '../tools/builtin/memory.read';
 import '../tools/builtin/memory.write';
 import '../tools/builtin/artifact.create';
@@ -26,6 +30,7 @@ import { loadAgents } from '../agents/loader';
 import { getAgent } from '../agents/registry';
 import { loadBootConfig, applyBootConfig } from '../boot/index';
 import { CronScheduler, fireDueCronEntries } from '../boot/cron';
+import { startApiServer } from '../api/index';
 
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS ?? '2000', 10);
 
@@ -40,7 +45,7 @@ function getAdapter(): LLMAdapter {
   return new MockLLMAdapter();
 }
 
-export async function startDaemon(): Promise<void> {
+export async function startDaemon(apiPort?: number): Promise<void> {
   const status = daemonStatus();
   if (status.running) {
     console.error(`Daemon already running (pid ${status.pid}). Stop it first with: bendos daemon:stop`);
@@ -51,6 +56,9 @@ export async function startDaemon(): Promise<void> {
   loadExternalTools(process.env.TOOLS_DIR ?? './tools');
   seedToolRegistry();
   loadAgents(process.env.AGENTS_DIR ?? './agents');
+
+  const port = apiPort ?? parseInt(process.env.API_PORT ?? '4000', 10);
+  const apiServer = startApiServer(port);
 
   const bootEntries = loadBootConfig(process.env.BOOT_CONFIG ?? './boot.json');
   const cronScheduler = new CronScheduler();
@@ -72,6 +80,7 @@ export async function startDaemon(): Promise<void> {
     log(`${signal} received — finishing current task then stopping...`);
     shuttingDown = true;
     if (sleepTimer) { clearTimeout(sleepTimer); sleepTimer = null; }
+    apiServer.close();
   };
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
