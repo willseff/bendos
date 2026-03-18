@@ -15,6 +15,7 @@ import '../tools/builtin/fs.read';
 import '../tools/builtin/fs.ls';
 import '../tools/builtin/fs.stat';
 import '../tools/builtin/fs.write';
+import '../tools/builtin/http.fetch';
 import '../vfs/init';
 
 import { Command } from 'commander';
