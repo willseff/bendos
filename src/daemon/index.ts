@@ -25,6 +25,7 @@ import { writePid, clearPid, daemonStatus } from './pid';
 import { loadAgents } from '../agents/loader';
 import { getAgent } from '../agents/registry';
 import { loadBootConfig, applyBootConfig } from '../boot/index';
+import { CronScheduler, fireDueCronEntries } from '../boot/cron';
 
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS ?? '2000', 10);
 
@@ -52,9 +53,13 @@ export async function startDaemon(): Promise<void> {
   loadAgents(process.env.AGENTS_DIR ?? './agents');
 
   const bootEntries = loadBootConfig(process.env.BOOT_CONFIG ?? './boot.json');
-  applyBootConfig(bootEntries);
+  const cronScheduler = new CronScheduler();
+  cronScheduler.init(bootEntries);
+  applyBootConfig(bootEntries.filter(e => !e.cron));  // one-time entries only
   if (bootEntries.length > 0) {
-    log(`boot: spawned tasks from ${bootEntries.length} boot entr${bootEntries.length === 1 ? 'y' : 'ies'}`);
+    const cronCount = bootEntries.filter(e => e.cron).length;
+    const onceCount = bootEntries.filter(e => !e.cron).length;
+    log(`boot: ${onceCount} one-time entr${onceCount === 1 ? 'y' : 'ies'}, ${cronCount} cron schedule${cronCount === 1 ? '' : 's'}`);
   }
 
   const adapter = getAdapter();
@@ -79,6 +84,7 @@ export async function startDaemon(): Promise<void> {
   try {
     while (!shuttingDown) {
       processResumeSignals();
+      fireDueCronEntries(cronScheduler, bootEntries);
       const next = getNextTask();
 
       if (next) {

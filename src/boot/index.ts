@@ -5,6 +5,7 @@ import { getAgent } from '../agents/registry';
 export interface BootEntry {
   agentType: string;
   goal: string;
+  cron?: string;        // Standard 5-field cron expression (e.g. "0 9 * * *")
   priority?: number;
   jobId?: string;
 }

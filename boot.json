@@ -2,5 +2,11 @@
   {
     "agentType": "monitor",
     "goal": "Check system state, summarize active tasks and recent events, store findings in memory, then call task.done."
+  },
+  {
+    "agentType": "researcher",
+    "goal": "Write a brief daily digest of noteworthy AI developments and store it as an artifact at /digests/daily.md",
+    "cron": "0 9 * * *",
+    "priority": 2
   }
 ]
