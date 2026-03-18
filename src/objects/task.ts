@@ -19,6 +19,7 @@ export interface Task {
   spawn_count: number;
   step_count: number;
   result: TaskResult | null;
+  capabilities: string[] | null;
   created_at: number;
   updated_at: number;
 }
@@ -31,6 +32,7 @@ interface TaskRow {
   spawn_count: number;
   step_count: number;
   result: string | null;
+  capabilities: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -44,20 +46,22 @@ function fromRow(row: TaskRow): Task {
     spawn_count: row.spawn_count,
     step_count: row.step_count,
     result: row.result ? JSON.parse(row.result) as TaskResult : null,
+    capabilities: row.capabilities ? JSON.parse(row.capabilities) as string[] : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
 
-export function createTask(goal: string, parentTaskId?: string): Task {
+export function createTask(goal: string, parentTaskId?: string, capabilities?: string[]): Task {
   const db = getDb();
   const id = randomUUID();
   const now = Date.now();
+  const caps = capabilities !== undefined ? JSON.stringify(capabilities) : null;
 
   db.prepare(`
-    INSERT INTO tasks (id, goal, status, parent_task_id, spawn_count, step_count, created_at, updated_at)
-    VALUES (?, ?, 'pending', ?, 0, 0, ?, ?)
-  `).run(id, goal, parentTaskId ?? null, now, now);
+    INSERT INTO tasks (id, goal, status, parent_task_id, spawn_count, step_count, capabilities, created_at, updated_at)
+    VALUES (?, ?, 'pending', ?, 0, 0, ?, ?, ?)
+  `).run(id, goal, parentTaskId ?? null, caps, now, now);
 
   return getTask(id)!;
 }

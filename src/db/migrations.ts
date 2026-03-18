@@ -80,6 +80,8 @@ export function runMigrations(db: Database.Database): void {
     `ALTER TABLE memories  ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'`,
     `ALTER TABLE artifacts ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'`,
     `ALTER TABLE tasks     ADD COLUMN result TEXT`,
+    `ALTER TABLE tasks     ADD COLUMN capabilities TEXT`,
+    `ALTER TABLE artifacts ADD COLUMN path TEXT`,
   ]) {
     try { db.exec(sql); } catch { /* column already exists */ }
   }

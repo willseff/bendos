@@ -3,6 +3,8 @@ import '../tools/builtin/task.done';
 import '../tools/builtin/memory.read';
 import '../tools/builtin/memory.write';
 import '../tools/builtin/artifact.create';
+import '../tools/builtin/artifact.read';
+import '../tools/builtin/artifact.list';
 import '../tools/builtin/state.query';
 import '../tools/builtin/message.send';
 import '../tools/builtin/message.receive';
@@ -159,10 +161,12 @@ export function buildCli(): Command {
   program
     .command('task:create <goal>')
     .description('Create a new task with the given goal')
-    .action((goal: string) => {
+    .option('-c, --capabilities <tools>', 'Comma-separated list of allowed tool names (e.g. memory.write,task.done)')
+    .action((goal: string, opts: { capabilities?: string }) => {
       getDb();
-      const task = createTask(goal);
-      console.log(`Created task: ${task.id}`);
+      const caps = opts.capabilities ? opts.capabilities.split(',').map(s => s.trim()) : undefined;
+      const task = createTask(goal, undefined, caps);
+      console.log(`Created task: ${task.id}${caps ? `  capabilities=[${caps.join(',')}]` : ''}`);
     });
 
   program

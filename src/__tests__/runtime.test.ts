@@ -10,6 +10,8 @@ import '../tools/builtin/task.done';
 import '../tools/builtin/memory.read';
 import '../tools/builtin/memory.write';
 import '../tools/builtin/artifact.create';
+import '../tools/builtin/artifact.read';
+import '../tools/builtin/artifact.list';
 import '../tools/builtin/state.query';
 
 describe('runtime', () => {

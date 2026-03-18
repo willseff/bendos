@@ -13,5 +13,12 @@ export function checkPolicy(task: Task, toolName: string): PolicyResult {
     };
   }
 
+  if (task.capabilities !== null && !task.capabilities.includes(toolName)) {
+    return {
+      allowed: false,
+      reason: `tool "${toolName}" is not in this task's capabilities allowlist`,
+    };
+  }
+
   return { allowed: true };
 }

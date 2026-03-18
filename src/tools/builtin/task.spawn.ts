@@ -5,14 +5,19 @@ import { emitEvent } from '../../objects/event';
 
 registerTool({
   name: 'task.spawn',
-  description: 'Spawn a new child task with a given goal.',
+  description: 'Spawn a new child task with a given goal. Optionally restrict which tools the child can use via capabilities (array of tool names). If omitted, the child inherits the parent\'s capabilities.',
   inputSchema: z.object({
     goal: z.string().min(1),
+    capabilities: z.array(z.string()).optional(),
   }),
   async execute(input, ctx) {
-    const child = createTask(input.goal, ctx.taskId);
+    // Inherit parent capabilities if not explicitly provided.
+    const caps = input.capabilities !== undefined
+      ? input.capabilities
+      : ctx.task.capabilities ?? undefined;
+    const child = createTask(input.goal, ctx.taskId, caps);
     incrementSpawnCount(ctx.taskId);
-    emitEvent('task.spawned', { childTaskId: child.id, goal: input.goal }, ctx.taskId);
-    return { id: child.id, goal: child.goal };
+    emitEvent('task.spawned', { childTaskId: child.id, goal: input.goal, capabilities: child.capabilities }, ctx.taskId);
+    return { id: child.id, goal: child.goal, capabilities: child.capabilities };
   },
 });
