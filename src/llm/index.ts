@@ -11,6 +11,7 @@ export type AgentAction = z.infer<typeof AgentActionSchema>;
 
 export interface LLMContext {
   goal: string;
+  taskId?: string;
   systemPrompt?: string;
   events: Array<{ type: string; payload: unknown; created_at: number }>;
   memories: Array<{ id: string; content: string; tags: string[] }>;

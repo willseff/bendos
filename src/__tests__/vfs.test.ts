@@ -89,6 +89,34 @@ describe('/proc synthetic mount', () => {
     expect(parsed.status).toBe('pending');
     expect(parsed).toHaveProperty('priority');
     expect(parsed).toHaveProperty('step_count');
+    expect(parsed).toHaveProperty('result');
+  });
+
+  it('/proc/self resolves to the calling task', () => {
+    const viaSelf = vfsRead(`/proc/self/status`, { taskId });
+    const viaDirect = vfsRead(`/proc/${taskId}/status`, { taskId });
+    expect(viaSelf).toBe(viaDirect);
+  });
+
+  it('/proc/self/status lists the calling task id', () => {
+    const parsed = JSON.parse(vfsRead('/proc/self/status', { taskId })!);
+    expect(parsed.id).toBe(taskId);
+  });
+
+  it('fs.ls /proc/self lists proc files', () => {
+    const entries = vfsList('/proc/self', { taskId });
+    expect(entries).not.toBeNull();
+    expect(entries!.map(e => e.name)).toContain('status');
+  });
+
+  it('fs.stat /proc/self returns dir', () => {
+    const stat = vfsStat('/proc/self', { taskId });
+    expect(stat!.type).toBe('dir');
+  });
+
+  it('/proc/self without taskId returns null', () => {
+    // No taskId in context — "self" cannot resolve
+    expect(vfsRead('/proc/self/status', {})).toBeNull();
   });
 
   it('/proc/<taskId>/events returns event array', () => {

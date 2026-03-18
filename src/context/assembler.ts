@@ -7,6 +7,62 @@ import { listRegisteredTools } from '../tools/registry';
 import { getAgent } from '../agents/registry';
 import type { LLMContext } from '../llm/index';
 
+// Build the OS-level system prompt that every agent receives regardless of agent type.
+// Agent-specific prompts are appended after the OS context.
+function buildSystemPrompt(task: Task, agentSystemPrompt?: string, unreadCount = 0): string {
+  const short = task.id.slice(0, 8);
+  const allTools = listRegisteredTools();
+  const allowedTools = task.capabilities
+    ? allTools.filter(t => task.capabilities!.includes(t.name))
+    : allTools;
+
+  const toolList = allowedTools.map(t => `  ${t.name}`).join('\n');
+
+  const lines: string[] = [
+    `# System`,
+    `You are a bendos agent.`,
+    `Task ID : ${task.id}  (short: ${short})`,
+    `Goal    : ${task.goal}`,
+    task.parent_task_id ? `Parent  : ${task.parent_task_id.slice(0, 8)}` : '',
+    task.job_id         ? `Job     : ${task.job_id}` : '',
+    ``,
+    `# Tools`,
+    task.capabilities
+      ? `You are restricted to these ${allowedTools.length} tool(s):`
+      : `All ${allowedTools.length} registered tool(s) are available:`,
+    toolList,
+    ``,
+    `# Filesystem`,
+    `Use fs.ls and fs.read to navigate the virtual filesystem.`,
+    `  /proc/self          your process directory (status, events, inbox, memory)`,
+    `  /proc/self/status   your full task record including result after task.done`,
+    `  /proc/${short}      same as /proc/self`,
+    `  /agents             agent definitions`,
+    ``,
+    `# Coordination`,
+    `- Spawn subtasks with task.spawn. Join on them with task.wait.`,
+    `- When task.wait resumes you, check your inbox for a task.result message.`,
+    `- Send messages to other tasks with message.send.`,
+    `- Write persistent facts with memory.write.`,
+    `- Produce file output with artifact.create (sets a /path for later fs.read).`,
+    ``,
+  ].filter(l => l !== null) as string[];
+
+  if (unreadCount > 0) {
+    lines.push(`# Inbox`);
+    lines.push(`You have ${unreadCount} unread message(s). Read /proc/self/inbox or call message.receive.`);
+    lines.push(``);
+  }
+
+  if (agentSystemPrompt) {
+    lines.push(`# Agent Instructions`);
+    lines.push(agentSystemPrompt);
+    lines.push(``);
+  }
+
+  return lines.join('\n').trim();
+}
+
 export function assembleContext(task: Task, previousNote?: string): LLMContext {
   const events = listEvents(task.id, 10);
   const memories = queryMemories(task.id);
@@ -16,10 +72,12 @@ export function assembleContext(task: Task, previousNote?: string): LLMContext {
   const unread = receiveMessages(task.id, false);
 
   const agentDef = task.agent_type ? getAgent(task.agent_type) : undefined;
+  const systemPrompt = buildSystemPrompt(task, agentDef?.systemPrompt, unread.length);
 
   return {
     goal: task.goal,
-    systemPrompt: agentDef?.systemPrompt,
+    taskId: task.id,
+    systemPrompt,
     events: events.map(e => ({
       type: e.type,
       payload: e.payload,

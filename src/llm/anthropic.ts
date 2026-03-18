@@ -19,11 +19,10 @@ export class AnthropicAdapter implements LLMAdapter {
       .map(t => `- ${t.name}: ${t.description}`)
       .join('\n');
 
-    const baseInstructions = `\n\nAvailable tools:\n${toolList}\n\nYou MUST respond with valid JSON matching this schema:\n{\n  "thought": "your reasoning (1-500 chars)",\n  "tool": "tool_name",\n  "input": { ... tool-specific input ... },\n  "note": "optional note for next step"\n}\n\nWrap your JSON response in a code block like this:\n\`\`\`json\n{ ... }\n\`\`\``;
+    const baseInstructions = `\n\n## Response format\nYou MUST respond with valid JSON matching this schema:\n{\n  "thought": "your reasoning (1-500 chars)",\n  "tool": "tool_name",\n  "input": { ... tool-specific input ... },\n  "note": "optional note for next step"\n}\n\nWrap your JSON response in a code block:\n\`\`\`json\n{ ... }\n\`\`\``;
 
-    const systemPrompt = context.systemPrompt
-      ? context.systemPrompt + baseInstructions
-      : `You are an autonomous agent operating inside the bendos runtime.\nYour job is to make progress on the given goal by selecting tools and providing inputs.` + baseInstructions;
+    // The assembler always provides a fully-built system prompt.
+    const systemPrompt = (context.systemPrompt ?? '') + baseInstructions;
 
     const recentEvents = context.events
       .slice(-10)

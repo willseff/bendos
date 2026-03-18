@@ -15,23 +15,10 @@ export class OpenAIAdapter implements LLMAdapter {
     const { default: OpenAI } = await import('openai');
     const client = new OpenAI({ apiKey: this.apiKey });
 
-    const toolList = context.tools
-      .map(t => `- ${t.name}: ${t.description}`)
-      .join('\n');
+    const responseFormat = `\n\nYou MUST respond with valid JSON:\n{\n  "thought": "your reasoning (1-500 chars)",\n  "tool": "tool_name",\n  "input": { ... tool-specific input ... },\n  "note": "optional note for next step"\n}`;
 
-    const systemPrompt = `You are an autonomous agent operating inside the bendos runtime.
-Your job is to make progress on the given goal by selecting tools and providing inputs.
-
-Available tools:
-${toolList}
-
-You MUST respond with valid JSON matching this schema:
-{
-  "thought": "your reasoning (1-500 chars)",
-  "tool": "tool_name",
-  "input": { ... tool-specific input ... },
-  "note": "optional note for next step"
-}`;
+    // The assembler always provides a fully-built system prompt.
+    const systemPrompt = (context.systemPrompt ?? '') + responseFormat;
 
     const recentEvents = context.events
       .slice(-10)
