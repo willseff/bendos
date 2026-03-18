@@ -6,6 +6,7 @@ import '../tools/builtin/artifact.create';
 import '../tools/builtin/state.query';
 import '../tools/builtin/message.send';
 import '../tools/builtin/message.receive';
+import '../tools/builtin/task.pipe';
 
 import { Command } from 'commander';
 import { getDb } from '../db/index';
@@ -17,6 +18,7 @@ import { listArtifacts } from '../objects/artifact';
 import { queryMemories } from '../objects/memory';
 import { listEvents } from '../objects/event';
 import { listMessages } from '../objects/message';
+import { createPipe, listPipes } from '../objects/pipe';
 import { runOnce, runAll } from '../kernel/runtime';
 import type { LLMAdapter } from '../llm/index';
 import { MockLLMAdapter } from '../llm/mock';
@@ -145,6 +147,27 @@ export function buildCli(): Command {
         } else {
           console.log(`  [${event.type}] ${JSON.stringify(event.payload)}`);
         }
+      }
+    });
+
+  program
+    .command('pipe:create <fromId> <toId>')
+    .description('Pipe the output of one task into another task\'s inbox on completion')
+    .action((fromId: string, toId: string) => {
+      getDb();
+      const pipe = createPipe(fromId, toId);
+      console.log(`Pipe created: ${pipe.from_task_id.slice(0, 8)}... → ${pipe.to_task_id.slice(0, 8)}...`);
+    });
+
+  program
+    .command('pipe:list')
+    .description('List all pipes')
+    .action(() => {
+      getDb();
+      const pipes = listPipes();
+      if (pipes.length === 0) { console.log('No pipes.'); return; }
+      for (const p of pipes) {
+        console.log(`${p.from_task_id.slice(0, 8)}... → ${p.to_task_id.slice(0, 8)}...`);
       }
     });
 

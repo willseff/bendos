@@ -57,10 +57,20 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pipes (
+      id TEXT PRIMARY KEY,
+      from_task_id TEXT NOT NULL,
+      to_task_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+  `);
+
   // Incremental columns — safe to re-run on existing databases.
   for (const sql of [
     `ALTER TABLE memories  ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'`,
     `ALTER TABLE artifacts ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'`,
+    `ALTER TABLE tasks     ADD COLUMN result TEXT`,
   ]) {
     try { db.exec(sql); } catch { /* column already exists */ }
   }

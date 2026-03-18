@@ -1,11 +1,14 @@
 import type { LLMAdapter } from '../llm/index';
 import { validateAction } from '../llm/index';
 import { getNextTask, } from './scheduler';
-import { getTask, updateTaskStatus, incrementStepCount } from '../objects/task';
+import { getTask, updateTaskStatus, incrementStepCount, setTaskResult } from '../objects/task';
+import type { TaskResult } from '../objects/task';
 import { emitEvent } from '../objects/event';
 import { assembleContext } from '../context/assembler';
 import { checkPolicy } from '../policy/index';
 import { getTool } from '../tools/registry';
+import { getPipesFrom } from '../objects/pipe';
+import { sendMessage } from '../objects/message';
 
 const MAX_STEPS = 20;
 
@@ -126,6 +129,23 @@ export async function runOnce(
 
     // Check if task.done was called
     if (action.tool === 'task.done') {
+      const taskResult = result as TaskResult;
+
+      // Persist structured exit result
+      setTaskResult(task.id, taskResult);
+
+      // Deliver result to any downstream tasks connected by pipes
+      const pipes = getPipesFrom(task.id);
+      for (const pipe of pipes) {
+        sendMessage(task.id, pipe.to_task_id, 'pipe.result', {
+          from_task: task.id,
+          goal: task.goal,
+          status: taskResult.status,
+          output: taskResult.output,
+          summary: taskResult.summary,
+        });
+      }
+
       updateTaskStatus(task.id, 'complete');
       return { ran: true, taskId: task.id };
     }

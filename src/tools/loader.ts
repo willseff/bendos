@@ -36,7 +36,9 @@ export function loadExternalTools(dir: string): void {
       if (ext === '.json') {
         loadExecTool(fullPath);
       } else if (ext === '.js' || ext === '.ts') {
-        loadModuleTool(fullPath);
+        // Skip if a companion .json manifest exists — that file is an exec runner, not a module.
+        const hasManifest = fs.existsSync(fullPath.replace(/\.(js|ts)$/, '.json'));
+        if (!hasManifest) loadModuleTool(fullPath);
       }
     } catch (err) {
       console.warn(`[loader] Failed to load tool from ${file}:`, err instanceof Error ? err.message : err);
