@@ -4,7 +4,7 @@
 
 An OS for LLM agents.
 
-bendos gives language models the primitives a real operating system gives programs: processes, memory, a filesystem, IPC, signals, capabilities, and a scheduler. Agents run autonomously inside a persistent daemon — no chat UI, no cloud, no human in the loop.
+bendos gives language models the primitives a real operating system gives programs: processes, a virtual filesystem, IPC, signals, capabilities, a scheduler, and a network stack. Agents run as persistent tasks inside a daemon — no chat UI, no human in the loop.
 
 ---
 
@@ -12,47 +12,55 @@ bendos gives language models the primitives a real operating system gives progra
 
 | OS primitive | bendos equivalent |
 |---|---|
-| Process | Task — has a goal, status, step count, priority |
-| Executable | Agent def — JSON file defining role, system prompt, capabilities |
-| Signal | `cancel`, `pause`, `resume`, `inject` — intercepted between steps |
-| Filesystem | Artifacts with paths (`/reports/summary.md`) |
-| Memory | Private/public key-value store per task |
+| Process | Task — goal, status, priority, env vars, step count |
+| Executable | Agent def — JSON file with system prompt, capabilities, restart policy |
+| `/proc` | `/proc/<taskId>/status\|events\|inbox\|memory\|env` — live task introspection |
+| `/proc/self` | Alias to the calling task's own process directory |
+| `/tmp` | Shared writable scratch space — any task can read and write |
+| Filesystem | VFS with explicit mount points — `fs.read`, `fs.write`, `fs.ls`, `fs.stat` |
+| `process.env` | Per-task env map — readable from `/proc/self/env`, shown in system prompt |
+| Signal | `cancel`, `pause`, `resume`, `inject` — delivered between steps |
 | IPC | Point-to-point messages + pipes between tasks |
+| `fork` + `wait` | `task.spawn` + `task.wait` — parent suspends until child returns result |
+| Exit code | `task.done` stores structured `{ status, output, summary }` on the task row |
 | Capabilities | Per-task tool allowlist enforced by the policy layer |
 | Scheduler | Priority queue → depth-first children → FIFO |
-| Daemon | Always-on process that runs tasks, supervises services, fires cron jobs |
-| ps / top | `bendos ps` and `bendos top --watch` |
-| Process group | Job ID — kill an entire group atomically with `bendos job:kill` |
-| wait() | `task.wait` — suspend a task until a child completes, receive result in inbox |
-| systemd service | `"restart": "always"` in agent def — daemon respawns automatically |
-| cron | `"cron": "0 9 * * *"` in boot.json — scheduled agent execution |
+| `systemd` service | `"restart": "always"` in agent def — daemon respawns on exit |
+| `cron` | `"cron": "0 9 * * *"` in boot.json — scheduled execution |
+| Process group | Job ID — cancel an entire group atomically |
+| Network | `http.fetch` — outbound HTTP with timeout and response size cap |
+| HTTP API | REST API on `:4000` — create tasks, send signals, read VFS |
 
 ---
-
-## Install
-
-```bash
-npm install
-cp .env.example .env   # set LLM_PROVIDER and API key
-```
 
 ## Quickstart
 
 ```bash
-# Start the daemon — boots agents from boot.json, runs forever
+git clone https://github.com/willseff/bendos
+cd bendos
+npm install
+export LLM_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=sk-...
+
+# Start the daemon (also starts HTTP API on :4000)
 npx tsx src/main.ts daemon
 
-# In another terminal
-npx tsx src/main.ts ps
+# In another terminal — create a task
+npx tsx src/main.ts task:create "research the top 5 open source vector databases"
+
+# Watch it run
 npx tsx src/main.ts top --watch
+
+# Read the result
+npx tsx src/main.ts trace <taskId>
 ```
 
-Or run one-shot:
+Or via HTTP:
 
 ```bash
-npx tsx src/main.ts task:create "research the history of unix" --priority 5
-npx tsx src/main.ts run
-npx tsx src/main.ts trace <taskId>
+curl -X POST localhost:4000/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"goal": "summarize the latest arxiv ML papers", "agentType": "researcher"}'
 ```
 
 ---
@@ -65,8 +73,8 @@ Create a JSON file in `agents/`:
 {
   "name": "researcher",
   "description": "Researches a topic and writes a report",
-  "systemPrompt": "You are a research agent. Investigate the topic, store findings in memory, write a report to /reports/<topic>.md, then call task.done.",
-  "capabilities": ["memory.write", "memory.read", "artifact.create", "artifact.read", "artifact.list", "task.done"],
+  "systemPrompt": "You are a research agent. Use http.fetch to gather information, store findings with memory.write, write your report to /reports/<topic>.md with fs.write, then call task.done.",
+  "capabilities": ["http.fetch", "fs.read", "fs.write", "fs.ls", "memory.write", "memory.read", "task.done"],
   "maxSteps": 30,
   "restart": "on-failure"
 }
@@ -78,6 +86,52 @@ Run one immediately:
 npx tsx src/main.ts agent:run researcher "the history of Plan 9"
 ```
 
+Spawn one from another agent using `task.spawn`:
+
+```json
+{
+  "tool": "task.spawn",
+  "input": {
+    "goal": "fetch and summarize https://example.com/paper.pdf",
+    "agentType": "researcher",
+    "env": { "OUTPUT_PATH": "/reports/paper.md" }
+  }
+}
+```
+
+---
+
+## What agents see
+
+Every agent boots with a system prompt generated by the OS:
+
+```
+# System
+You are a bendos agent.
+Task ID : abc12345-...  (short: abc12345)
+Goal    : write a report on vector databases
+
+# Tools
+All 15 registered tool(s) are available:
+  http.fetch
+  fs.read
+  fs.write
+  ...
+
+# Filesystem
+Use fs.ls and fs.read to navigate. Use fs.write to create or update files.
+  /proc/self          your process directory (status, events, inbox, memory, env)
+  /proc/self/status   your full task record including result after task.done
+  /tmp                shared scratch space — readable and writable by all tasks
+
+# Coordination
+- Spawn subtasks with task.spawn. Join on them with task.wait.
+- When task.wait resumes you, check your inbox for a task.result message.
+- Share files between tasks by writing to /tmp and reading from /tmp.
+```
+
+Each step the agent receives: kernel events (signals, lifecycle, errors — not replayed tool calls), memories, inbox, and a **rolling scratchpad** of its own notes from previous steps.
+
 ---
 
 ## Boot config
@@ -86,55 +140,92 @@ npx tsx src/main.ts agent:run researcher "the history of Plan 9"
 
 ```json
 [
-  { "agentType": "monitor", "goal": "check system state and log findings" },
+  { "agentType": "monitor", "goal": "check system health and log findings" },
   { "agentType": "researcher", "goal": "write daily digest", "cron": "0 9 * * *" }
 ]
 ```
 
 - Entries without `cron` spawn once on startup (idempotent — skipped if already running)
-- Entries with `cron` fire on schedule, every time the expression matches
-- `"restart": "always"` in the agent def respawns it whenever it exits
+- Entries with `cron` fire on schedule every time the expression matches
+- `"restart": "always"` in the agent def keeps a task alive as a service
 
 ---
 
-## Key CLI commands
+## HTTP API
+
+The daemon exposes a REST API on port 4000 (configurable via `--port` or `API_PORT`):
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness check |
+| `GET` | `/tasks` | List all tasks |
+| `POST` | `/tasks` | Create a task |
+| `GET` | `/tasks/:id` | Get a task |
+| `GET` | `/tasks/:id/events` | Full event trace |
+| `POST` | `/tasks/:id/signal` | Send a signal |
+| `GET` | `/agents` | List registered agents |
+| `GET` | `/vfs?path=&op=read\|ls\|stat` | Read the virtual filesystem |
+| `GET` | `/jobs` | List job groups |
+| `DELETE` | `/jobs/:id` | Cancel all tasks in a job |
+
+---
+
+## CLI
 
 ```bash
-bendos daemon              # start the daemon
-bendos daemon:stop         # graceful shutdown
-bendos ps                  # process tree
-bendos top --watch         # live system snapshot
+bendos daemon [--port N]       # start daemon + HTTP API
+bendos daemon:status           # check if running
+bendos daemon:stop             # graceful shutdown
+
+bendos ps                      # process tree
+bendos top [--watch]           # live system snapshot
 
 bendos task:create <goal> [--priority N] [--job <id>] [--capabilities a,b]
 bendos agent:list
 bendos agent:run <name> <goal>
 
-bendos signal:send <taskId> cancel|pause|resume|inject
 bendos job:list
 bendos job:kill <jobId>
 
-bendos trace <taskId>      # full event log for a task
+bendos signal:send <taskId> cancel|pause|resume|inject [-p '{"key":"val"}']
+bendos trace <taskId>          # full event log
 ```
-
----
-
-## LLM adapters
-
-Set `LLM_PROVIDER` in `.env`:
-
-| Value | Requires |
-|---|---|
-| `mock` | nothing — deterministic, for testing |
-| `anthropic` | `ANTHROPIC_API_KEY` |
-| `openai` | `OPENAI_API_KEY` |
 
 ---
 
 ## Built-in tools
 
-`task.spawn` `task.done` `task.wait` `task.pipe` `memory.read` `memory.write` `artifact.create` `artifact.read` `artifact.list` `message.send` `message.receive` `signal.send` `state.query`
+| Tool | Description |
+|---|---|
+| `task.spawn` | Fork a child task |
+| `task.done` | Exit with structured result |
+| `task.wait` | Suspend until a child completes |
+| `task.pipe` | Route this task's output to another task's inbox on completion |
+| `fs.read` | Read a file from the VFS |
+| `fs.write` | Write a file to the VFS (`/tmp/` paths are public) |
+| `fs.ls` | List a directory |
+| `fs.stat` | Stat a path |
+| `http.fetch` | Outbound HTTP — GET/POST/PUT/etc, auto JSON parse, 512 KB cap |
+| `memory.write` | Persist a fact across steps |
+| `memory.read` | Search memories by tag |
+| `message.send` | Send a message to another task's inbox |
+| `message.receive` | Consume unread inbox messages |
+| `signal.send` | Send cancel/pause/resume/inject to a task you supervise |
+| `state.query` | Query running tasks or event history |
 
-External tools can be added to the `tools/` directory as exec scripts (stdin/stdout JSON) or JS modules.
+External tools can be added to `tools/` as JS modules or stdin/stdout exec scripts.
+
+---
+
+## LLM providers
+
+Set `LLM_PROVIDER` in the environment:
+
+| Value | Requires |
+|---|---|
+| `mock` | nothing — deterministic two-step loop, for testing |
+| `anthropic` | `ANTHROPIC_API_KEY` — uses `claude-opus-4-6` |
+| `openai` | `OPENAI_API_KEY` — uses `gpt-4o` |
 
 ---
 
@@ -144,4 +235,4 @@ External tools can be added to the `tools/` directory as exec scripts (stdin/std
 npm test
 ```
 
-77 tests across scheduler, signals, IPC, pipes, isolation, capabilities, agents, jobs, wait, cron, and the runtime loop.
+165 tests across: scheduler, runtime, signals, IPC, pipes, jobs, capabilities, agents, VFS, `/proc/self`, `/tmp`, `fs.write`, `http.fetch`, cron, supervisor, boot config, stale task recovery, HTTP API, and context assembly.
