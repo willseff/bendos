@@ -4,6 +4,7 @@ import { getArtifactByPath } from '../../objects/artifact';
 
 registerTool({
   name: 'artifact.read',
+  hidden: true,   // superseded by fs.read
   description: 'Read the content of an artifact by its path (e.g. "/reports/summary.md"). Returns null if not found or not visible to this task.',
   inputSchema: z.object({
     path: z.string().min(1),

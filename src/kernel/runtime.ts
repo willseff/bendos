@@ -41,7 +41,7 @@ export async function runOnce(
   emitEvent('task.started', { goal: task.goal }, task.id);
 
   const maxSteps = task.max_steps ?? DEFAULT_MAX_STEPS;
-  let previousNote: string | undefined;
+  const scratchpad: string[] = [];
 
   for (let step = 0; step < maxSteps; step++) {
     // Re-fetch task to get latest spawn_count, step_count, etc.
@@ -72,7 +72,7 @@ export async function runOnce(
       // 'resume' is handled by the daemon, not here.
     }
 
-    const context = assembleContext(currentTask, previousNote);
+    const context = assembleContext(currentTask, scratchpad);
 
     // Call LLM adapter
     let rawAction: unknown;
@@ -141,12 +141,12 @@ export async function runOnce(
     // Emit action.executed
     emitEvent(
       'action.executed',
-      { step, thought: action.thought, tool: action.tool, input: action.input, result },
+      { step, thought: action.thought, tool: action.tool, input: action.input, result, scratchpad: action.scratchpad },
       task.id
     );
 
-    // Save note for next iteration
-    previousNote = action.note;
+    // Accumulate scratchpad entry for next iteration
+    if (action.scratchpad) scratchpad.push(action.scratchpad);
 
     // Check if task.wait suspended this task (waiting_for set by tool)
     const refreshed = getTask(task.id)!;

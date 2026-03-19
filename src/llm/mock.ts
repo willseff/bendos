@@ -4,8 +4,7 @@ export class MockLLMAdapter implements LLMAdapter {
   name = 'mock';
 
   async complete(context: LLMContext): Promise<AgentAction> {
-    const executedCount = context.events.filter(e => e.type === 'action.executed').length;
-    const step = executedCount % 2;
+    const step = context.scratchpad.length % 2;
 
     if (step === 0) {
       return {
@@ -15,6 +14,7 @@ export class MockLLMAdapter implements LLMAdapter {
           content: `Working on goal: ${context.goal}`,
           tags: ['goal'],
         },
+        scratchpad: 'wrote initial memory',
       };
     }
 

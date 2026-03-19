@@ -72,8 +72,10 @@ function buildSystemPrompt(task: Task, agentSystemPrompt?: string, unreadCount =
   return lines.join('\n').trim();
 }
 
-export function assembleContext(task: Task, previousNote?: string): LLMContext {
-  const events = listEvents(task.id, 10);
+const SCRATCHPAD_MAX = 10;
+
+export function assembleContext(task: Task, scratchpad: string[] = []): LLMContext {
+  const allEvents = listEvents(task.id, 20);
   const memories = queryMemories(task.id);
   const artifacts = listArtifacts(task.id);
   const tools = listRegisteredTools();
@@ -82,6 +84,12 @@ export function assembleContext(task: Task, previousNote?: string): LLMContext {
 
   const agentDef = task.agent_type ? getAgent(task.agent_type) : undefined;
   const systemPrompt = buildSystemPrompt(task, agentDef?.systemPrompt, unread.length);
+
+  // Filter out action.executed — the agent already knows what it chose each step.
+  // Show only external/kernel events: signals, task lifecycle, errors, messages.
+  const events = allEvents
+    .filter(e => e.type !== 'action.executed')
+    .slice(-10);
 
   return {
     goal: task.goal,
@@ -110,6 +118,6 @@ export function assembleContext(task: Task, previousNote?: string): LLMContext {
       type: m.type,
       payload: m.payload,
     })),
-    note: previousNote,
+    scratchpad: scratchpad.slice(-SCRATCHPAD_MAX),
   };
 }

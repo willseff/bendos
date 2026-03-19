@@ -10,6 +10,7 @@ export interface ToolContext {
 export interface ToolDefinition<TInput = unknown> {
   name: string;
   description: string;
+  hidden?: boolean;   // if true, tool works but is excluded from the agent's tool list
   inputSchema: ZodSchema<TInput>;
   execute(input: TInput, ctx: ToolContext): Promise<unknown>;
 }
@@ -25,10 +26,9 @@ export function getTool(name: string): ToolDefinition<unknown> | undefined {
 }
 
 export function listRegisteredTools(): Array<{ name: string; description: string }> {
-  return Array.from(registry.values()).map(t => ({
-    name: t.name,
-    description: t.description,
-  }));
+  return Array.from(registry.values())
+    .filter(t => !t.hidden)
+    .map(t => ({ name: t.name, description: t.description }));
 }
 
 export function seedToolRegistry(): void {

@@ -4,6 +4,7 @@ import { listArtifacts, listArtifactsByPath } from '../../objects/artifact';
 
 registerTool({
   name: 'artifact.list',
+  hidden: true,   // superseded by fs.ls
   description: 'List artifacts visible to this task. Provide a path prefix to list a directory (e.g. "/reports"). Omit prefix to list all visible artifacts.',
   inputSchema: z.object({
     prefix: z.string().optional(),

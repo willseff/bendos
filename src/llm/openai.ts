@@ -21,25 +21,36 @@ export class OpenAIAdapter implements LLMAdapter {
     const systemPrompt = (context.systemPrompt ?? '') + responseFormat;
 
     const recentEvents = context.events
-      .slice(-10)
       .map(e => `[${e.type}] ${JSON.stringify(e.payload)}`)
       .join('\n');
 
     const memorySummary = context.memories
-      .map(m => `- [${m.tags.join(', ')}] ${m.content}`)
+      .map(m => `- [${m.tags.join(', ') || 'untagged'}] ${m.content}`)
       .join('\n');
+
+    const inboxSummary = context.inbox.length > 0
+      ? context.inbox.map(m => `- [${m.type}] from=${m.from.slice(0, 8)} ${JSON.stringify(m.payload)}`).join('\n')
+      : '(empty)';
+
+    const scratchpadSummary = context.scratchpad.length > 0
+      ? context.scratchpad.map((s, i) => `${i + 1}. ${s}`).join('\n')
+      : '(empty)';
 
     const userMessage = `Goal: ${context.goal}
 
-Recent events:
+Scratchpad (your notes from previous steps):
+${scratchpadSummary}
+
+Kernel events (signals, task lifecycle, errors):
 ${recentEvents || '(none)'}
 
 Memories:
 ${memorySummary || '(none)'}
 
-${context.note ? `Previous note: ${context.note}` : ''}
+Inbox (unread messages from other tasks):
+${inboxSummary}
 
-What is your next action?`;
+When the goal is fully achieved, call task.done. What is your next action?`;
 
     const response = await client.chat.completions.create({
       model: this.model,

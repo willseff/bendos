@@ -5,7 +5,7 @@ import { listEvents } from '../../objects/event';
 
 registerTool({
   name: 'state.query',
-  description: 'Query system state: list tasks or events.',
+  description: 'Query system state. Use type="tasks" to find other tasks by status (e.g. pending, running, complete) — useful for coordinators checking on workers. Use type="events" to review your own recent event history beyond what is shown in context.',
   inputSchema: z.object({
     type: z.enum(['tasks', 'events']),
     status: z.string().optional(),

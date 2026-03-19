@@ -5,7 +5,7 @@ import { emitEvent } from '../../objects/event';
 
 registerTool({
   name: 'signal.send',
-  description: 'Send a signal to another task. cancel=stop immediately, pause=suspend, resume=unpause, inject=push data into inbox mid-run.',
+  description: 'Send a control signal to a task you are supervising. cancel: stop it immediately. pause/resume: throttle work. inject: push a data payload into its inbox while it is running. Only use on tasks you spawned or are responsible for.',
   inputSchema: z.object({
     to: z.string().min(1).describe('Target task ID'),
     type: z.enum(['cancel', 'pause', 'resume', 'inject']).describe('Signal type'),

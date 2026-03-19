@@ -4,7 +4,7 @@ export const AgentActionSchema = z.object({
   thought: z.string().min(1).max(500),
   tool: z.string().min(1),
   input: z.record(z.unknown()),
-  note: z.string().optional(),
+  scratchpad: z.string().optional().describe('Optional note appended to your rolling scratchpad, visible in future steps'),
 });
 
 export type AgentAction = z.infer<typeof AgentActionSchema>;
@@ -17,9 +17,8 @@ export interface LLMContext {
   memories: Array<{ id: string; content: string; tags: string[] }>;
   artifacts: Array<{ name: string; path: string | null; mimeType: string; visibility: string }>;
   tools: Array<{ name: string; description: string }>;
-  // Unread messages in this task's inbox from other tasks.
   inbox: Array<{ id: string; from: string; type: string; payload: unknown }>;
-  note?: string;
+  scratchpad: string[];   // rolling notes from previous steps, newest last
 }
 
 export interface LLMAdapter {

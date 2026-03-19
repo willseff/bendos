@@ -4,7 +4,7 @@ import { readMemory, queryMemories } from '../../objects/memory';
 
 registerTool({
   name: 'memory.read',
-  description: 'Read a specific memory by id, or query memories by tag for the current task.',
+  description: 'Search your memories by tag, or fetch a specific memory by ID. Your memories are already shown in context each step — only call this when you need to filter by a specific tag or look up a memory by ID.',
   inputSchema: z.object({
     id: z.string().optional(),
     tag: z.string().optional(),
