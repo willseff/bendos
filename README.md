@@ -4,7 +4,7 @@
 
 An OS for LLM agents.
 
-bendos gives language models the primitives a real operating system gives programs: processes, a virtual filesystem, IPC, signals, capabilities, a scheduler, and a network stack. Agents run as persistent tasks inside a daemon — no chat UI, no human in the loop.
+bendos gives language models the primitives a real operating system gives programs: processes, a virtual filesystem, IPC, signals, capabilities, a scheduler, and a network stack. Agents run as persistent tasks inside a daemon — concurrently, autonomously, no chat UI, no human in the loop.
 
 ---
 
@@ -24,7 +24,7 @@ bendos gives language models the primitives a real operating system gives progra
 | `fork` + `wait` | `task.spawn` + `task.wait` — parent suspends until child returns result |
 | Exit code | `task.done` stores structured `{ status, output, summary }` on the task row |
 | Capabilities | Per-task tool allowlist enforced by the policy layer |
-| Scheduler | Priority queue → depth-first children → FIFO |
+| Scheduler | Priority queue → depth-first children → FIFO, up to N concurrent |
 | `systemd` service | `"restart": "always"` in agent def — daemon respawns on exit |
 | `cron` | `"cron": "0 9 * * *"` in boot.json — scheduled execution |
 | Process group | Job ID — cancel an entire group atomically |
@@ -42,7 +42,7 @@ npm install
 export LLM_PROVIDER=anthropic
 export ANTHROPIC_API_KEY=sk-...
 
-# Start the daemon (also starts HTTP API on :4000)
+# Start the daemon — runs up to 4 agents concurrently, HTTP API on :4000
 npx tsx src/main.ts daemon
 
 # In another terminal — create a task
@@ -173,9 +173,9 @@ The daemon exposes a REST API on port 4000 (configurable via `--port` or `API_PO
 ## CLI
 
 ```bash
-bendos daemon [--port N]       # start daemon + HTTP API
+bendos daemon [--port N]       # start daemon + HTTP API (MAX_CONCURRENT env var, default 4)
 bendos daemon:status           # check if running
-bendos daemon:stop             # graceful shutdown
+bendos daemon:stop             # graceful shutdown — drains in-flight tasks first
 
 bendos ps                      # process tree
 bendos top [--watch]           # live system snapshot
@@ -227,6 +227,20 @@ Set `LLM_PROVIDER` in the environment:
 | `anthropic` | `ANTHROPIC_API_KEY` — uses `claude-opus-4-6` |
 | `openai` | `OPENAI_API_KEY` — uses `gpt-4o` |
 
+**Env vars:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_PROVIDER` | `mock` | `anthropic`, `openai`, or `mock` |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | — | API key for chosen provider |
+| `MAX_CONCURRENT` | `4` | Max tasks running simultaneously |
+| `POLL_INTERVAL_MS` | `2000` | How often to check for new tasks when idle |
+| `API_PORT` | `4000` | HTTP API port |
+| `DB_PATH` | `bendos.db` | SQLite database path |
+| `AGENTS_DIR` | `./agents` | Directory for agent JSON definitions |
+| `TOOLS_DIR` | `./tools` | Directory for external tool scripts |
+| `BOOT_CONFIG` | `./boot.json` | Boot config path |
+
 ---
 
 ## Tests
@@ -235,4 +249,4 @@ Set `LLM_PROVIDER` in the environment:
 npm test
 ```
 
-165 tests across: scheduler, runtime, signals, IPC, pipes, jobs, capabilities, agents, VFS, `/proc/self`, `/tmp`, `fs.write`, `http.fetch`, cron, supervisor, boot config, stale task recovery, HTTP API, and context assembly.
+165 tests across: scheduler, concurrent runtime, signals, IPC, pipes, jobs, capabilities, agents, VFS, `/proc/self`, `/tmp`, `fs.write`, `http.fetch`, cron, supervisor, boot config, stale task recovery, HTTP API, and context assembly.

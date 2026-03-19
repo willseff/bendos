@@ -1,6 +1,6 @@
 import type { LLMAdapter } from '../llm/index';
 import { validateAction } from '../llm/index';
-import { getNextTask, } from './scheduler';
+import { claimNextTask } from './scheduler';
 import { getTask, updateTaskStatus, incrementStepCount, setTaskResult } from '../objects/task';
 import type { TaskResult } from '../objects/task';
 import { emitEvent } from '../objects/event';
@@ -31,13 +31,11 @@ function resumeWaiters(taskId: string, finalStatus: string, result: TaskResult |
   }
 }
 
-export async function runOnce(
-  adapter: LLMAdapter
+// Run a pre-claimed task (already marked running) to completion.
+export async function runTask(
+  task: import('../objects/task').Task,
+  adapter: LLMAdapter,
 ): Promise<{ ran: boolean; taskId?: string }> {
-  const task = getNextTask();
-  if (!task) return { ran: false };
-
-  updateTaskStatus(task.id, 'running');
   emitEvent('task.started', { goal: task.goal }, task.id);
 
   const maxSteps = task.max_steps ?? DEFAULT_MAX_STEPS;
@@ -187,6 +185,12 @@ export async function runOnce(
   resumeWaiters(task.id, 'failed', null);
   updateTaskStatus(task.id, 'failed');
   return { ran: true, taskId: task.id };
+}
+
+export async function runOnce(adapter: LLMAdapter): Promise<{ ran: boolean; taskId?: string }> {
+  const task = claimNextTask();
+  if (!task) return { ran: false };
+  return runTask(task, adapter);
 }
 
 export async function runAll(adapter: LLMAdapter): Promise<void> {

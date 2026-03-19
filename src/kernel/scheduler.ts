@@ -2,6 +2,7 @@ import { listTasks, getTask, updateTaskStatus } from '../objects/task';
 import type { Task } from '../objects/task';
 import { getPendingResumeSignals, markSignalDelivered } from '../objects/signal';
 import { emitEvent } from '../objects/event';
+import { getDb } from '../db/index';
 
 // Called by the daemon before each poll. Flips paused tasks back to pending
 // when a resume signal is waiting for them.
@@ -34,4 +35,18 @@ export function getNextTask(): Task | null {
   });
 
   return sorted[0];
+}
+
+// Atomically select and mark the next task as running.
+// Uses a SQLite transaction so concurrent callers can't claim the same task.
+export function claimNextTask(): Task | null {
+  const db = getDb();
+  let claimed: Task | null = null;
+  db.transaction(() => {
+    const task = getNextTask();
+    if (!task) return;
+    updateTaskStatus(task.id, 'running');
+    claimed = { ...task, status: 'running' };
+  })();
+  return claimed;
 }

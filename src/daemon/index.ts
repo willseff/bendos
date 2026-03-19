@@ -20,8 +20,8 @@ import '../tools/builtin/message.receive';
 import { getDb } from '../db/index';
 import { seedToolRegistry } from '../tools/registry';
 import { loadExternalTools } from '../tools/loader';
-import { runOnce } from '../kernel/runtime';
-import { getNextTask, processResumeSignals } from '../kernel/scheduler';
+import { runTask } from '../kernel/runtime';
+import { claimNextTask, processResumeSignals } from '../kernel/scheduler';
 import { getTask, createTask, recoverStaleTasks } from '../objects/task';
 import { MockLLMAdapter } from '../llm/mock';
 import { OpenAIAdapter } from '../llm/openai';
@@ -34,7 +34,8 @@ import { loadBootConfig, applyBootConfig } from '../boot/index';
 import { CronScheduler, fireDueCronEntries } from '../boot/cron';
 import { startApiServer } from '../api/index';
 
-const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS ?? '2000', 10);
+const POLL_INTERVAL   = parseInt(process.env.POLL_INTERVAL_MS ?? '2000', 10);
+const MAX_CONCURRENT  = parseInt(process.env.MAX_CONCURRENT  ?? '4',    10);
 
 function log(msg: string): void {
   console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -90,7 +91,44 @@ export async function startDaemon(apiPort?: number): Promise<void> {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT',  () => shutdown('SIGINT'));
 
-  log(`daemon started  pid=${process.pid}  adapter=${adapter.name}  poll=${POLL_INTERVAL}ms`);
+  log(`daemon started  pid=${process.pid}  adapter=${adapter.name}  poll=${POLL_INTERVAL}ms  concurrency=${MAX_CONCURRENT}`);
+
+  // in-flight: taskId → promise that resolves when the task finishes
+  const inFlight = new Map<string, Promise<void>>();
+
+  function onTaskFinished(taskId: string) {
+    const task = getTask(taskId)!;
+    log(`✓ ${task.id.slice(0, 8)}  [${task.status}]  ${task.step_count} steps  (${inFlight.size - 1} still running)`);
+
+    // Supervisor: restart if agent def has a restart policy.
+    if (task.agent_type) {
+      const def = getAgent(task.agent_type);
+      const shouldRestart = def && (
+        def.restart === 'always' ||
+        (def.restart === 'on-failure' && task.status === 'failed')
+      );
+      if (shouldRestart) {
+        const restarted = createTask(task.goal, {
+          agentType: task.agent_type,
+          capabilities: task.capabilities ?? undefined,
+          priority: task.priority,
+          jobId: task.job_id ?? undefined,
+          maxSteps: task.max_steps ?? undefined,
+        });
+        log(`↻ restarting ${task.agent_type} → ${restarted.id.slice(0, 8)}`);
+      }
+    }
+  }
+
+  // Start a task and track it in the pool.
+  function startTask(task: import('../objects/task').Task): void {
+    log(`→ ${task.id.slice(0, 8)}  "${task.goal}"  (${inFlight.size + 1}/${MAX_CONCURRENT})`);
+    const p = runTask(task, adapter)
+      .then(result => { if (result.taskId) onTaskFinished(result.taskId); })
+      .catch(err  => { log(`✗ ${task.id.slice(0, 8)}  error: ${err}`); })
+      .finally(() => { inFlight.delete(task.id); });
+    inFlight.set(task.id, p);
+  }
 
   let idle = false;
 
@@ -98,37 +136,18 @@ export async function startDaemon(apiPort?: number): Promise<void> {
     while (!shuttingDown) {
       processResumeSignals();
       fireDueCronEntries(cronScheduler, bootEntries);
-      const next = getNextTask();
 
-      if (next) {
+      // Fill slots up to MAX_CONCURRENT.
+      while (inFlight.size < MAX_CONCURRENT) {
+        const next = claimNextTask();
+        if (!next) break;
         idle = false;
-        log(`→ ${next.id.slice(0, 8)}  "${next.goal}"`);
+        startTask(next);
+      }
 
-        const result = await runOnce(adapter);
-
-        if (result.taskId) {
-          const task = getTask(result.taskId)!;
-          log(`✓ ${task.id.slice(0, 8)}  [${task.status}]  ${task.step_count} steps`);
-
-          // Supervisor: restart if agent def has a restart policy.
-          if (task.agent_type) {
-            const def = getAgent(task.agent_type);
-            const shouldRestart = def && (
-              def.restart === 'always' ||
-              (def.restart === 'on-failure' && task.status === 'failed')
-            );
-            if (shouldRestart) {
-              const restarted = createTask(task.goal, {
-                agentType: task.agent_type,
-                capabilities: task.capabilities ?? undefined,
-                priority: task.priority,
-                jobId: task.job_id ?? undefined,
-                maxSteps: task.max_steps ?? undefined,
-              });
-              log(`↻ restarting ${task.agent_type} → ${restarted.id.slice(0, 8)}`);
-            }
-          }
-        }
+      if (inFlight.size > 0) {
+        // Wait for any one task to finish, then loop to refill slots.
+        await Promise.race(inFlight.values());
       } else {
         if (!idle) {
           log(`idle — polling every ${POLL_INTERVAL}ms`);
@@ -139,6 +158,12 @@ export async function startDaemon(apiPort?: number): Promise<void> {
         });
         sleepTimer = null;
       }
+    }
+
+    // Drain: wait for all in-flight tasks to finish before exiting.
+    if (inFlight.size > 0) {
+      log(`draining ${inFlight.size} in-flight task(s)...`);
+      await Promise.all(inFlight.values());
     }
   } finally {
     clearPid();
